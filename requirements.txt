@@ -1,4 +1,4 @@
 redis
-fastapi
-uvicorn[standard]
-requests
+
+grpcio
+grpcio-tools

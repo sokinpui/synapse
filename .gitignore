@@ -1,1 +1,5 @@
 redis_data/
+
+src/synapse/task_pb2.py
+src/synapse/task_pb2_grpc.py
+
