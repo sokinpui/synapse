@@ -9,5 +9,5 @@ export REDIS_OM_URL="redis://default:root@localhost:6666/0"
 generate proto
 
 ```
-
+python -m grpc_tools.protoc -I=proto --python_out=src/synapse --grpc_python_out=src/synapse proto/generate.proto
 ```
