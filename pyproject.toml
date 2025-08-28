@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synapse"
+version = "0.1.0"
+
+dependencies = [
+    "grpcio",
+    "grpcio-tools",
+    "redis",
+    "pydantic",
+]
+
+[project.scripts]
+synapse-server = "synapse.server:serve"
+synapse-worker = "synapse.worker:run"
+synapse-client = "synapse.client:run"
