@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 
 import grpc
@@ -6,6 +7,12 @@ import redis.asyncio as redis
 
 from .grpc import generate_pb2, generate_pb2_grpc
 from .rqueue import RQueue
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 class Server(generate_pb2_grpc.GenerateServicer):
@@ -17,6 +24,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
 
     async def GenerateTask(self, request, context):
         task_id = str(uuid.uuid4())
+        logger.info(f"-> Received request, assigned task_id: {task_id}")
         result_channel = task_id
 
         pubsub = self._redis.pubsub()
@@ -54,7 +62,7 @@ async def serve_async():
     generate_pb2_grpc.add_GenerateServicer_to_server(Server(redis_client), server)
     server.add_insecure_port("[::]:50051")
     await server.start()
-    print("Server started on port 50051.")
+    logger.info("Server started on port 50051.")
     await server.wait_for_termination()
 
 
@@ -62,7 +70,7 @@ def serve():
     try:
         asyncio.run(serve_async())
     except KeyboardInterrupt:
-        print("Server shutting down.")
+        logger.info("Server shutting down.")
 
 if __name__ == "__main__":
     serve()
