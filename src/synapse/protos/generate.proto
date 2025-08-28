@@ -6,10 +6,6 @@ service Generate {
 
 message Request {
   string prompt = 1;
-  optional float temperature = 2;
-  optional float top_p = 3;
-  optional int32 top_k = 4;
-  optional int32 output_length = 5;
 }
 
 message Response {

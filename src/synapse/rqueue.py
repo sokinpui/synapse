@@ -11,9 +11,8 @@ class RQueue:
     def __init__(self, name):
         self.name = name
 
-    def enqueue(self, k: str, v: dict) -> None:
-        data = json.dumps({k: v})
-        _r.lpush(self.name, data)
+    def enqueue(self, item: dict) -> None:
+        _r.lpush(self.name, json.dumps(item))
 
     def dequeue(self) -> dict | None:
         data = _r.rpop(self.name)
