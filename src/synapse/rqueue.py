@@ -1,24 +1,21 @@
 import json
 
-import redis
-
-_r = redis.Redis(
-    host="localhost", port=6666, db=0, password="root", decode_responses=True
-)
+import redis.asyncio as redis
 
 
 class RQueue:
-    def __init__(self, name):
+    def __init__(self, redis_client: redis.Redis, name: str):
+        self._redis = redis_client
         self.name = name
 
-    def enqueue(self, item: dict) -> None:
-        _r.lpush(self.name, json.dumps(item))
+    async def enqueue(self, item: dict) -> None:
+        await self._redis.lpush(self.name, json.dumps(item))
 
-    def dequeue(self) -> dict | None:
-        data = _r.rpop(self.name)
+    async def get_length(self) -> int:
+        return await self._redis.llen(self.name)
+
+    async def dequeue(self, timeout: int = 0) -> dict | None:
+        data = await self._redis.brpop(self.name, timeout=timeout)
         if data:
-            return json.loads(data)
+            return json.loads(data[1])
         return None
-
-    def get_length(self) -> int:
-        return _r.llen(self.name)
