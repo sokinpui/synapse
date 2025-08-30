@@ -11,7 +11,3 @@ class BaseWorker(ABC):
     @abstractmethod
     async def dequeue(self) -> None:
         pass
-
-    @abstractmethod
-    async def process(self, task: dict) -> Any:
-        pass

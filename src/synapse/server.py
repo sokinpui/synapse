@@ -36,6 +36,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
                 "task_id": task_id,
                 "prompt": request.prompt,
                 "model_code": request.model_code,
+                "stream": request.stream,
             }
             await self._q.enqueue(task)
 
@@ -47,12 +48,16 @@ class Server(generate_pb2_grpc.GenerateServicer):
                 if data == self._sentinel:
                     break
 
-                output_parts.append(data)
+                if request.stream:
+                    yield generate_pb2.Response(output_string=data)
+                else:
+                    output_parts.append(data)
         finally:
             await pubsub.unsubscribe(result_channel)
             await pubsub.close()
 
-        return generate_pb2.Response(output_string="".join(output_parts))
+        if not request.stream:
+            yield generate_pb2.Response(output_string="".join(output_parts))
 
 
 async def serve_async():

@@ -28,16 +28,30 @@ class GenAIWorker(BaseWorker):
         response = await genai.agenerate(model_code, prompt)
         return response
 
+    async def process_stream(self, task: dict) -> None:
+        model_code = task["model_code"]
+        prompt = task["prompt"]
+        result_channel = task["task_id"]
+        async for chunk in genai.agenerate_stream(model_code, prompt):
+            await self._redis.publish(result_channel, chunk)
+
     async def dequeue(self) -> None:
         """Dequeues and processes a single task."""
         self._logger.info("Waiting for a generation task...")
 
         task = await self._queue.dequeue()
+        if not task:
+            return
+
         result_channel = task["task_id"]
+        is_stream = task.get("stream", False)
 
         try:
-            result = await self.process(task)
-            await self._redis.publish(result_channel, result)
+            if is_stream:
+                await self.process_stream(task)
+            else:
+                result = await self.process(task)
+                await self._redis.publish(result_channel, result)
         except Exception as e:
             self._logger.error(
                 f"Error processing generation task {task['task_id']}: {e}"

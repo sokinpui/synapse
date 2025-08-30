@@ -1,12 +1,13 @@
 syntax = "proto3";
 
 service Generate {
-  rpc GenerateTask(Request) returns (Response) {}
+  rpc GenerateTask(Request) returns (stream Response) {}
 }
 
 message Request {
   string prompt = 1;
   string model_code = 2;
+  bool stream = 3;
 }
 
 message Response {
