@@ -6,6 +6,7 @@ import grpc
 import redis.asyncio as redis
 
 from .grpc import generate_pb2, generate_pb2_grpc
+from .models import GenerationTask
 from .rqueue import RQueue
 
 logging.basicConfig(
@@ -32,13 +33,13 @@ class Server(generate_pb2_grpc.GenerateServicer):
 
         output_parts = []
         try:
-            task = {
-                "task_id": task_id,
-                "prompt": request.prompt,
-                "model_code": request.model_code,
-                "stream": request.stream,
-            }
-            await self._q.enqueue(task)
+            task = GenerationTask(
+                task_id=task_id,
+                prompt=request.prompt,
+                model_code=request.model_code,
+                stream=request.stream,
+            )
+            await self._q.enqueue(task.model_dump())
 
             async for message in pubsub.listen():
                 if message["type"] != "message":

@@ -3,8 +3,10 @@ import logging
 import os
 
 import redis.asyncio as redis
+from pydantic import ValidationError
 from sllmipy.llms import genai
 
+from ..models import GenerationTask
 from ..rqueue import RQueue
 from .base_worker import BaseWorker
 
@@ -22,40 +24,41 @@ class GenAIWorker(BaseWorker):
         self._worker_id = f"Gen AI worker-{os.getpid()}"
         self._logger = logging.getLogger(self._worker_id)
 
-    async def process(self, task: dict) -> str:
-        model_code = task["model_code"]
-        prompt = task["prompt"]
-        response = await genai.agenerate(model_code, prompt)
+    async def process(self, task: GenerationTask) -> str:
+        response = await genai.agenerate(task.model_code, task.prompt)
         return response
 
-    async def process_stream(self, task: dict) -> None:
-        model_code = task["model_code"]
-        prompt = task["prompt"]
-        result_channel = task["task_id"]
-        async for chunk in genai.agenerate_stream(model_code, prompt):
+    async def process_stream(self, task: GenerationTask) -> None:
+        result_channel = task.task_id
+        async for chunk in genai.agenerate_stream(task.model_code, task.prompt):
             await self._redis.publish(result_channel, chunk)
 
     async def dequeue(self) -> None:
         """Dequeues and processes a single task."""
         self._logger.info("Waiting for a generation task...")
 
-        task = await self._queue.dequeue()
-        if not task:
+        task_dict = await self._queue.dequeue()
+        if not task_dict:
             return
 
-        result_channel = task["task_id"]
-        is_stream = task.get("stream", False)
+        try:
+            task = GenerationTask.model_validate(task_dict)
+        except ValidationError as e:
+            self._logger.error(
+                f"Task validation failed: {e}. Dropping task: {task_dict}"
+            )
+            return
+
+        result_channel = task.task_id
 
         try:
-            if is_stream:
+            if task.stream:
                 await self.process_stream(task)
             else:
                 result = await self.process(task)
                 await self._redis.publish(result_channel, result)
         except Exception as e:
-            self._logger.error(
-                f"Error processing generation task {task['task_id']}: {e}"
-            )
+            self._logger.error(f"Error processing generation task {task.task_id}: {e}")
             await self._redis.publish(result_channel, f"Error: {e}")
         finally:
             await self._redis.publish(result_channel, self._sentinel)
