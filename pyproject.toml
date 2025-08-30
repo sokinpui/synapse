@@ -15,5 +15,5 @@ dependencies = [
 
 [project.scripts]
 synapse-server = "synapse.server:serve"
-synapse-worker = "synapse.worker:run"
+synapse-worker = "synapse.worker.genai_worker:run"
 synapse-client = "synapse.client:run"

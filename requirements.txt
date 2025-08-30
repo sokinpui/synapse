@@ -2,3 +2,7 @@ redis
 
 grpcio
 grpcio-tools
+
+sllmipy
+
+httpx[socks]
