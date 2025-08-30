@@ -35,6 +35,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
             task = {
                 "task_id": task_id,
                 "prompt": request.prompt,
+                "model_code": request.model_code,
             }
             await self._q.enqueue(task)
 
@@ -71,6 +72,7 @@ def serve():
         asyncio.run(serve_async())
     except KeyboardInterrupt:
         logger.info("Server shutting down.")
+
 
 if __name__ == "__main__":
     serve()

@@ -3,6 +3,7 @@ import logging
 import os
 
 import redis.asyncio as redis
+from sllmipy.llms import genai
 
 from ..rqueue import RQueue
 from .base_worker import BaseWorker
@@ -22,13 +23,18 @@ class GenAIWorker(BaseWorker):
         self._logger = logging.getLogger(self._worker_id)
 
     async def process(self, task: dict) -> str:
-        return ""
+        model_code = task["model_code"]
+        prompt = task["prompt"]
+        response = await genai.agenerate(model_code, prompt)
+        return response
 
     async def dequeue(self) -> None:
         """Dequeues and processes a single task."""
         self._logger.info("Waiting for a generation task...")
+
         task = await self._queue.dequeue()
         result_channel = task["task_id"]
+
         try:
             result = await self.process(task)
             await self._redis.publish(result_channel, result)

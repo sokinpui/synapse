@@ -6,6 +6,7 @@ service Generate {
 
 message Request {
   string prompt = 1;
+  string model_code = 2;
 }
 
 message Response {
