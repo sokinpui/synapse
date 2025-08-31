@@ -5,6 +5,7 @@ import uuid
 import grpc
 import redis.asyncio as redis
 
+from .config import settings
 from .grpc import generate_pb2, generate_pb2_grpc
 from .models import GenerationTask
 from .rqueue import RQueue
@@ -63,7 +64,11 @@ class Server(generate_pb2_grpc.GenerateServicer):
 
 async def serve_async():
     redis_client = redis.Redis(
-        host="localhost", port=6666, db=0, password="root", decode_responses=True
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        password=settings.REDIS_PASSWORD,
+        decode_responses=True,
     )
     server = grpc.aio.server()
     generate_pb2_grpc.add_GenerateServicer_to_server(Server(redis_client), server)

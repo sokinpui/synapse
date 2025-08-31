@@ -6,6 +6,7 @@ import redis.asyncio as redis
 from pydantic import ValidationError
 from sllmipy.llms import genai
 
+from ..config import settings
 from ..models import GenerationTask
 from ..rqueue import RQueue
 from .base_worker import BaseWorker
@@ -72,7 +73,11 @@ class GenAIWorker(BaseWorker):
 
 async def main():
     redis_client = redis.Redis(
-        host="localhost", port=6666, db=0, password="root", decode_responses=True
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        password=settings.REDIS_PASSWORD,
+        decode_responses=True,
     )
     worker = GenAIWorker(redis_client, "request_queue")
     await worker.run()
