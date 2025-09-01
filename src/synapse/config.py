@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6666
     REDIS_DB: int = 0
     REDIS_PASSWORD: str | None = "root"
+    GRPC_PORT: int = 50051
 
 
 settings = Settings()

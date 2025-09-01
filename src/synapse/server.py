@@ -72,9 +72,9 @@ async def serve_async():
     )
     server = grpc.aio.server()
     generate_pb2_grpc.add_GenerateServicer_to_server(Server(redis_client), server)
-    server.add_insecure_port("[::]:50051")
+    server.add_insecure_port(f"[::]:{settings.GRPC_PORT}")
     await server.start()
-    logger.info("Server started on port 50051.")
+    logger.info(f"Server started on port {settings.GRPC_PORT}.")
     await server.wait_for_termination()
 
 
