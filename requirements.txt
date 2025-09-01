@@ -6,3 +6,5 @@ grpcio-tools
 sllmipy
 
 httpx[socks]
+
+mypy-protobuf

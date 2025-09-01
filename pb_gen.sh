@@ -12,6 +12,8 @@ python -m grpc_tools.protoc \
   --proto_path=grpc=protos \
   --python_out=. \
   --grpc_python_out=. \
+  --mypy_out=. \
+  --mypy_grpc_out=. \
   protos/*.proto
 
 echo "Generation complete."
