@@ -26,12 +26,16 @@ class GenAIWorker(BaseWorker):
         self._logger = logging.getLogger(self._worker_id)
 
     async def process(self, task: GenerationTask) -> str:
-        response = await genai.agenerate(task.model_code, task.prompt)
+        response = await genai.agenerate(
+            task.model_code, task.prompt, config=task.config
+        )
         return response
 
     async def process_stream(self, task: GenerationTask) -> None:
         result_channel = task.task_id
-        async for chunk in genai.agenerate_stream(task.model_code, task.prompt):
+        async for chunk in genai.agenerate_stream(
+            task.model_code, task.prompt, config=task.config
+        ):
             await self._redis.publish(result_channel, chunk)
 
     async def dequeue(self) -> None:

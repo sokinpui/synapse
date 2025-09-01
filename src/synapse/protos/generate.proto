@@ -4,10 +4,18 @@ service Generate {
   rpc GenerateTask(Request) returns (stream Response) {}
 }
 
+message GenerationConfig {
+  optional float temperature = 1;
+  optional float top_p = 2;
+  optional int32 top_k = 3;
+  optional int32 output_length = 4;
+}
+
 message Request {
   string prompt = 1;
   string model_code = 2;
   bool stream = 3;
+  optional GenerationConfig config = 4;
 }
 
 message Response {
