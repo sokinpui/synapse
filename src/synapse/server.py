@@ -30,23 +30,22 @@ class Server(generate_pb2_grpc.GenerateServicer):
         result_channel = task_id
 
         pubsub = self._redis.pubsub()
-        await pubsub.subscribe(result_channel)
-
-        config_dict = None
-        if request.HasField("config"):
-            config_dict = {}
-            # We only add fields that are actually set in the request.
-            if request.config.HasField("temperature"):
-                config_dict["temperature"] = request.config.temperature
-            if request.config.HasField("top_p"):
-                config_dict["top_p"] = request.config.top_p
-            if request.config.HasField("top_k"):
-                config_dict["top_k"] = request.config.top_k
-            if request.config.HasField("output_length"):
-                config_dict["output_length"] = request.config.output_length
-
-        output_parts = []
         try:
+            await pubsub.subscribe(result_channel)
+
+            config_dict = None
+            if request.HasField("config"):
+                config_dict = {}
+                # We only add fields that are actually set in the request.
+                if request.config.HasField("temperature"):
+                    config_dict["temperature"] = request.config.temperature
+                if request.config.HasField("top_p"):
+                    config_dict["top_p"] = request.config.top_p
+                if request.config.HasField("top_k"):
+                    config_dict["top_k"] = request.config.top_k
+                if request.config.HasField("output_length"):
+                    config_dict["output_length"] = request.config.output_length
+
             task = GenerationTask(
                 task_id=task_id,
                 prompt=request.prompt,
@@ -56,6 +55,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
             )
             await self._q.enqueue(task.model_dump(exclude_none=True))
 
+            output_parts = []
             async for message in pubsub.listen():
                 if message["type"] != "message":
                     continue
@@ -68,12 +68,19 @@ class Server(generate_pb2_grpc.GenerateServicer):
                     yield generate_pb2.Response(output_string=data)
                 else:
                     output_parts.append(data)
+
+            if not request.stream:
+                yield generate_pb2.Response(output_string="".join(output_parts))
+
+        except redis.exceptions.RedisError as e:
+            logger.error(f"A Redis error occurred during task {task_id}: {e}")
+            await context.abort(grpc.StatusCode.INTERNAL, "A backend error occurred with Redis.")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during task {task_id}: {e}")
+            await context.abort(grpc.StatusCode.INTERNAL, "An unexpected server error occurred.")
         finally:
             await pubsub.unsubscribe(result_channel)
             await pubsub.close()
-
-        if not request.stream:
-            yield generate_pb2.Response(output_string="".join(output_parts))
 
 
 async def serve_async():

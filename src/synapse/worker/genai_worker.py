@@ -42,7 +42,16 @@ class GenAIWorker(BaseWorker):
         """Dequeues and processes a single task."""
         self._logger.info("Waiting for a generation task...")
 
-        task_dict = await self._queue.dequeue()
+        try:
+            task_dict = await self._queue.dequeue()
+        except redis.exceptions.RedisError as e:
+            self._logger.error(f"Failed to dequeue from Redis: {e}. Retrying in 5 seconds.")
+            await asyncio.sleep(5)
+            return
+        except Exception as e:
+            self._logger.error(f"Failed to decode task from queue: {e}. Dropping task.")
+            return
+
         if not task_dict:
             return
 
@@ -64,9 +73,15 @@ class GenAIWorker(BaseWorker):
                 await self._redis.publish(result_channel, result)
         except Exception as e:
             self._logger.error(f"Error processing generation task {task.task_id}: {e}")
-            await self._redis.publish(result_channel, f"Error: {e}")
+            try:
+                await self._redis.publish(result_channel, f"Error: {e}")
+            except redis.exceptions.RedisError as pub_e:
+                self._logger.error(f"Failed to publish error for task {task.task_id}: {pub_e}")
         finally:
-            await self._redis.publish(result_channel, self._sentinel)
+            try:
+                await self._redis.publish(result_channel, self._sentinel)
+            except redis.exceptions.RedisError as pub_e:
+                self._logger.error(f"Failed to publish sentinel for task {task.task_id}: {pub_e}")
 
     async def run(self) -> None:
         """The main loop for the worker."""
