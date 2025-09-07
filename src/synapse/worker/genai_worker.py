@@ -2,7 +2,8 @@ import asyncio
 import logging
 import os
 
-import redis.asyncio as redis
+import redis
+import redis.asyncio as aredis
 from pydantic import ValidationError
 from sllmipy.llms import genai
 
@@ -18,7 +19,7 @@ logging.basicConfig(
 
 
 class GenAIWorker(BaseWorker):
-    def __init__(self, redis_client: redis.Redis, queue_name: str):
+    def __init__(self, redis_client: aredis.Redis, queue_name: str):
         self._redis = redis_client
         self._queue = RQueue(self._redis, queue_name)
         self._sentinel = "[DONE]"
@@ -44,7 +45,7 @@ class GenAIWorker(BaseWorker):
 
         try:
             task_dict = await self._queue.dequeue()
-        except redis.exceptions.RedisError as e:
+        except redis.exceptions.ConnectionError as e:
             self._logger.error(f"Failed to dequeue from Redis: {e}. Retrying in 5 seconds.")
             await asyncio.sleep(5)
             return
@@ -75,12 +76,12 @@ class GenAIWorker(BaseWorker):
             self._logger.error(f"Error processing generation task {task.task_id}: {e}")
             try:
                 await self._redis.publish(result_channel, f"Error: {e}")
-            except redis.exceptions.RedisError as pub_e:
+            except redis.exceptions.ConnectionError as pub_e:
                 self._logger.error(f"Failed to publish error for task {task.task_id}: {pub_e}")
         finally:
             try:
                 await self._redis.publish(result_channel, self._sentinel)
-            except redis.exceptions.RedisError as pub_e:
+            except redis.exceptions.ConnectionError as pub_e:
                 self._logger.error(f"Failed to publish sentinel for task {task.task_id}: {pub_e}")
 
     async def run(self) -> None:
@@ -91,7 +92,7 @@ class GenAIWorker(BaseWorker):
 
 
 async def main():
-    redis_client = redis.Redis(
+    redis_client = aredis.Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
         db=settings.REDIS_DB,

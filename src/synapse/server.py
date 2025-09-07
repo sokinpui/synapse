@@ -3,7 +3,8 @@ import logging
 import uuid
 
 import grpc
-import redis.asyncio as redis
+import redis
+import redis.asyncio as aredis
 
 from .config import settings
 from .grpc import generate_pb2, generate_pb2_grpc
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class Server(generate_pb2_grpc.GenerateServicer):
 
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: aredis.Redis):
         self._redis = redis_client
         self._q = RQueue(self._redis, "request_queue")
         self._sentinel = "[DONE]"
@@ -72,7 +73,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
             if not request.stream:
                 yield generate_pb2.Response(output_string="".join(output_parts))
 
-        except redis.exceptions.RedisError as e:
+        except redis.exceptions.ConnectionError as e:
             logger.error(f"A Redis error occurred during task {task_id}: {e}")
             await context.abort(grpc.StatusCode.INTERNAL, "A backend error occurred with Redis.")
         except Exception as e:
@@ -84,7 +85,7 @@ class Server(generate_pb2_grpc.GenerateServicer):
 
 
 async def serve_async():
-    redis_client = redis.Redis(
+    redis_client = aredis.Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
         db=settings.REDIS_DB,

@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package protos;
+
 service Generate {
   rpc GenerateTask(Request) returns (stream Response) {}
 }
