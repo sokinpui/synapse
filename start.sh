@@ -6,7 +6,7 @@ echo "Tidying Go modules..."
 go mod tidy
 
 echo "Building binaries..."
-go build -o bin/server ./cmd/server
+GOWORK=off go build -o bin/server ./cmd/server
 echo "Build complete. Binaries are in the 'bin' directory."
 
 # for local deploy, use vpn proxy
