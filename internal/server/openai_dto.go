@@ -1,4 +1,4 @@
-package models
+package server
 
 type OpenAIChatMessage struct {
 	Role    string `json:"role,omitempty"`

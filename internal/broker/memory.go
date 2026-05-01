@@ -3,11 +3,11 @@ package broker
 import (
 	"sync"
 
-	"github.com/sokinpui/synapse.go/internal/models"
+	"github.com/sokinpui/synapse.go/internal/task"
 )
 
 type MemoryBroker struct {
-	tasks         chan *models.GenerationTask
+	tasks         chan *task.GenerationTask
 	subscribers   map[string]chan string
 	cancellations map[string]chan struct{}
 	mu            sync.RWMutex
@@ -15,17 +15,17 @@ type MemoryBroker struct {
 
 func NewMemoryBroker(bufferSize int) *MemoryBroker {
 	return &MemoryBroker{
-		tasks:         make(chan *models.GenerationTask, bufferSize),
+		tasks:         make(chan *task.GenerationTask, bufferSize),
 		subscribers:   make(map[string]chan string),
 		cancellations: make(map[string]chan struct{}),
 	}
 }
 
-func (b *MemoryBroker) Enqueue(task *models.GenerationTask) {
+func (b *MemoryBroker) Enqueue(task *task.GenerationTask) {
 	b.tasks <- task
 }
 
-func (b *MemoryBroker) Dequeue() <-chan *models.GenerationTask {
+func (b *MemoryBroker) Dequeue() <-chan *task.GenerationTask {
 	return b.tasks
 }
 

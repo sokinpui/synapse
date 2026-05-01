@@ -10,7 +10,7 @@ import (
 	"github.com/sokinpui/synapse.go/internal/broker"
 	"github.com/sokinpui/synapse.go/internal/color"
 	"github.com/sokinpui/synapse.go/internal/model"
-	"github.com/sokinpui/synapse.go/internal/models"
+	"github.com/sokinpui/synapse.go/internal/task"
 )
 
 const sentinel = "[DONE]"
@@ -59,7 +59,7 @@ func (w *GenAIWorker) Run(ctx context.Context) {
 	log.Printf("%s all workers stopped.", w.workerID)
 }
 
-func (w *GenAIWorker) processTask(ctx context.Context, task *models.GenerationTask) {
+func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask) {
 	log.Printf("-> %s task: %s [%s]", color.YellowString("Processing"), task.TaskID, task.ModelCode)
 	defer log.Printf("<- %s task: %s [%s]", color.GreenString("Finished"), task.TaskID, task.ModelCode)
 
@@ -108,7 +108,7 @@ func (w *GenAIWorker) listenForCancellation(ctx context.Context, taskID string, 
 	}
 }
 
-func (w *GenAIWorker) process(ctx context.Context, task *models.GenerationTask, model model.LLM) error {
+func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, model model.LLM) error {
 	result, err := model.Generate(ctx, task.Prompt, task.Images, task.Config)
 	if err != nil {
 		return err
@@ -117,7 +117,7 @@ func (w *GenAIWorker) process(ctx context.Context, task *models.GenerationTask, 
 	return nil
 }
 
-func (w *GenAIWorker) processStream(ctx context.Context, task *models.GenerationTask, model model.LLM) error {
+func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, model model.LLM) error {
 	outCh, errCh := model.GenerateStream(ctx, task.Prompt, task.Images, task.Config)
 
 	for {
