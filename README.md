@@ -64,50 +64,6 @@ docker compose up -d
 
 The server will listen for HTTP requests on the port specified in `config.yaml`.
 
-## Client Usage
-
-A Go client is available in the `./client` directory. Here's a simple example of how to use it:
-
-```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/sokinpui/synapse.go/v2/client"
-)
-
-func main() {
-	c := client.New("http://localhost:8080")
-	defer c.Close()
-
-	req := &client.GenerateRequest{
-		Prompt:    "Tell me a joke",
-		ModelCode: "gemini-2.5-pro",
-		Stream:    true,
-	}
-
-	resultChan, err := c.GenerateTask(context.Background(), req)
-	if err != nil {
-		log.Fatalf("Failed to generate task: %v", err)
-	}
-
-	for result := range resultChan {
-		if result.Err != nil {
-			log.Printf("Error during generation: %v", result.Err)
-			break
-		}
-		if result.IsKeepAlive {
-			continue
-		}
-		fmt.Print(result.Text)
-	}
-	fmt.Println()
-}
-```
-
 ## HTTP/REST API
 
 The server also exposes a REST/JSON API. You can send requests using `curl` or any HTTP client.
