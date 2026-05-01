@@ -74,7 +74,7 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 		w.broker.Publish(resultChannel, sentinel)
 	}()
 
-	model, err := w.llmRegistry.GetModel(task.ModelCode)
+	llm, err := w.llmRegistry.GetModel(task.ModelCode)
 	if err != nil {
 		log.Printf("Error getting model for task %s: %v", task.TaskID, err)
 		errMsg := fmt.Sprintf("Error: %v", err)
@@ -83,9 +83,9 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 	}
 
 	if task.Stream {
-		err = w.processStream(taskCtx, task, model)
+		err = w.processStream(taskCtx, task, llm)
 	} else {
-		err = w.process(taskCtx, task, model)
+		err = w.process(taskCtx, task, llm)
 	}
 
 	if err != nil {
@@ -108,8 +108,13 @@ func (w *GenAIWorker) listenForCancellation(ctx context.Context, taskID string, 
 	}
 }
 
-func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, model model.LLM) error {
-	result, err := model.Generate(ctx, task.Prompt, task.Images, task.Config)
+func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
+	req := &model.Request{
+		Messages: task.Messages,
+		Images: task.Images,
+		Config: task.Config,
+	}
+	result, err := llm.Generate(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -117,8 +122,13 @@ func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, mo
 	return nil
 }
 
-func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, model model.LLM) error {
-	outCh, errCh := model.GenerateStream(ctx, task.Prompt, task.Images, task.Config)
+func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
+	req := &model.Request{
+		Messages: task.Messages,
+		Images: task.Images,
+		Config: task.Config,
+	}
+	outCh, errCh := llm.GenerateStream(ctx, req)
 
 	for {
 		select {

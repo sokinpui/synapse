@@ -8,8 +8,8 @@ import (
 )
 
 type LLM interface {
-	Generate(ctx context.Context, prompt string, images [][]byte, config *Config) (string, error)
-	GenerateStream(ctx context.Context, prompt string, images [][]byte, config *Config) (<-chan string, <-chan error)
+	Generate(ctx context.Context, req *Request) (string, error)
+	GenerateStream(ctx context.Context, req *Request) (<-chan string, <-chan error)
 	CountTokens(prompt string) (int, error)
 }
 

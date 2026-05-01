@@ -1,15 +1,17 @@
 package model
 
 import (
+	"bufio"
+	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"log"
-	"github.com/sokinpui/synapse.go/internal/config"
-	"google.golang.org/genai"
-	"google.golang.org/genai/tokenizer"
+	"net/http"
 	"os"
 	"strings"
+
+	"github.com/sokinpui/synapse.go/internal/config"
 )
 
 func init() {
@@ -32,15 +34,17 @@ func newGeminiProvider(cfg *config.Config) (map[string]LLM, error) {
 	log.Printf("Gemini provider initialized with %d API keys", len(apiKeys))
 
 	models := make(map[string]LLM)
-	ctx := context.Background()
 	balancer := NewKeyBalancer(apiKeys)
+	client := &http.Client{}
 
+	baseURL := cfg.Models.Gemini.BaseURL
 	for _, code := range cfg.Models.Gemini.Codes {
-		model, err := NewGeminiModel(ctx, code, balancer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Gemini model '%s': %w", code, err)
+		models[code] = &GeminiModel{
+			model:    code,
+			balancer: balancer,
+			client:   client,
+			baseURL:  baseURL,
 		}
-		models[code] = model
 	}
 
 	return models, nil
@@ -48,29 +52,19 @@ func newGeminiProvider(cfg *config.Config) (map[string]LLM, error) {
 
 type GeminiModel struct {
 	model    string
+	baseURL  string
 	balancer *KeyBalancer
-}
-
-func NewGeminiModel(ctx context.Context, modelCode string, balancer *KeyBalancer) (*GeminiModel, error) {
-	return &GeminiModel{
-		model:    modelCode,
-		balancer: balancer,
-	}, nil
+	client   *http.Client
 }
 
 // Generate performs a non-streaming text generation.
-func (m *GeminiModel) Generate(ctx context.Context, prompt string, images [][]byte, config *Config) (string, error) {
+func (m *GeminiModel) Generate(ctx context.Context, req *Request) (string, error) {
 	if m.balancer.KeyCount() == 0 {
 		return "", fmt.Errorf("%w: API key is required for generation", ErrConfiguration)
 	}
 
-	content, err := buildContent(prompt, images)
-	if err != nil {
-		return "", err
-	}
-
-	genConfig := getGenConfig(config)
 	var lastErr error
+	bodyBytes, _ := json.Marshal(m.buildOpenAIRequest(req, false))
 
 	for i := 0; i < m.balancer.KeyCount(); i++ {
 		if ctx.Err() != nil {
@@ -80,36 +74,40 @@ func (m *GeminiModel) Generate(ctx context.Context, prompt string, images [][]by
 		apiKey, keyIdx := m.balancer.PickKey()
 		log.Printf("[%s] Attempting generation with API key #%d", m.model, keyIdx)
 
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGeminiAPI})
+		url := m.baseURL
+		if url == "" {
+			url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 		if err != nil {
-			lastErr = fmt.Errorf("failed to create genai client: %w", err)
-			log.Printf("Gemini API key [#%d] failed for model %s, retrying... Error: %v", keyIdx, m.model, err)
+			return "", err
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+		resp, err := m.client.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
 			continue
 		}
 
-		resp, err := client.Models.GenerateContent(ctx, m.model, content, genConfig)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return "", err
-			}
-			lastErr = fmt.Errorf("%w: %v", ErrGeneration, err)
-			log.Printf("Gemini API key [#%d] failed for model %s, retrying... Error: %v", keyIdx, m.model, err)
-			continue
+		var oaiResp openAIResponse
+		json.NewDecoder(resp.Body).Decode(&oaiResp)
+		if len(oaiResp.Choices) > 0 {
+			return oaiResp.Choices[0].Message.Content, nil
 		}
-
-		if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-			return "", fmt.Errorf("%w: no content in response", ErrGeneration)
-		}
-
-		return resp.Text(), nil
 	}
-
 	return "", fmt.Errorf("all API keys failed: %w", lastErr)
 }
 
 // GenerateStream performs a streaming text generation.
-func (m *GeminiModel) GenerateStream(ctx context.Context, prompt string, images [][]byte, config *Config) (<-chan string, <-chan error) {
-	genConfig := getGenConfig(config)
+func (m *GeminiModel) GenerateStream(ctx context.Context, req *Request) (<-chan string, <-chan error) {
 	outCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -122,13 +120,8 @@ func (m *GeminiModel) GenerateStream(ctx context.Context, prompt string, images 
 			return
 		}
 
-		content, err := buildContent(prompt, images)
-		if err != nil {
-			errCh <- err
-			return
-		}
-
 		var lastErr error
+		bodyBytes, _ := json.Marshal(m.buildOpenAIRequest(req, true))
 
 		for i := 0; i < m.balancer.KeyCount(); i++ {
 			if ctx.Err() != nil {
@@ -139,94 +132,91 @@ func (m *GeminiModel) GenerateStream(ctx context.Context, prompt string, images 
 			apiKey, keyIdx := m.balancer.PickKey()
 			log.Printf("[%s] Attempting stream generation with API key #%d", m.model, keyIdx)
 
-			client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGeminiAPI})
+			url := m.baseURL
+			if url == "" {
+				url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+			}
+			httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 			if err != nil {
-				lastErr = fmt.Errorf("failed to create genai client: %w", err)
-				log.Printf("Gemini API key [#%d] failed for model %s (stream), retrying... Error: %v", keyIdx, m.model, err)
+				errCh <- err
+				return
+			}
+			httpReq.Header.Set("Content-Type", "application/json")
+			httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+			resp, err := m.client.Do(httpReq)
+			if err != nil {
+				lastErr = err
 				continue
 			}
 
-			streamErr := func() error {
-				iter := client.Models.GenerateContentStream(ctx, m.model, content, genConfig)
-				for resp, err := range iter {
-					if err != nil {
-						return err
-					}
-					if resp != nil && len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
-						outCh <- resp.Text()
-					}
-				}
-				return nil
-			}()
-
-			if streamErr != nil {
-				if errors.Is(streamErr, context.Canceled) {
-					errCh <- streamErr
-					return
-				}
-				lastErr = fmt.Errorf("%w: %v", ErrGeneration, streamErr)
-				log.Printf("Gemini API key [#%d] failed for model %s (stream), retrying... Error: %v", keyIdx, m.model, streamErr)
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
 				continue
 			}
-			return // Success
+
+			scanner := bufio.NewScanner(resp.Body)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if !strings.HasPrefix(line, "data: ") {
+					continue
+				}
+				data := strings.TrimPrefix(line, "data: ")
+				if data == "[DONE]" {
+					break
+				}
+				var chunk openAIStreamChunk
+				if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
+					outCh <- chunk.Choices[0].Delta.Content
+				}
+			}
+			resp.Body.Close()
+			return
 		}
-
 		errCh <- fmt.Errorf("all API keys failed: %w", lastErr)
 	}()
 	return outCh, errCh
 }
 
-func buildContent(prompt string, images [][]byte) ([]*genai.Content, error) {
-	parts := []*genai.Part{genai.NewPartFromText(prompt)}
-
-	for _, imgBytes := range images {
-		parts = append(parts, genai.NewPartFromBytes(imgBytes, "image/jpeg"))
-	}
-
-	contents := []*genai.Content{
-		genai.NewContentFromParts(parts, genai.RoleUser),
-	}
-
-	return contents, nil
-}
-
 // CountTokens counts the number of tokens in a prompt.
 func (m *GeminiModel) CountTokens(prompt string) (int, error) {
-	tok, err := tokenizer.NewLocalTokenizer("gemini-2.5-flash")
-	if err != nil {
-		return 0, fmt.Errorf("token counting failed: %w", err)
-	}
-
-	ntoks, err := tok.CountTokens(genai.Text(prompt), nil)
-	if err != nil {
-		return 0, fmt.Errorf("token counting failed: %w", err)
-	}
-
-	return int(ntoks.TotalTokens), nil
+	return len(prompt) / 4, nil
 }
 
-func getGenConfig(config *Config) *genai.GenerateContentConfig {
-	if config == nil {
-		return &genai.GenerateContentConfig{}
+func (m *GeminiModel) buildOpenAIRequest(req *Request, stream bool) map[string]any {
+	payload := map[string]any{
+		"model":    m.model,
+		"messages": req.Messages,
+		"stream":   stream,
 	}
 
-	// var tools = []*genai.Tool{
-	// 	{
-	// 		GoogleSearch: &genai.GoogleSearch{},
-	// 		URLContext:   &genai.URLContext{},
-	// 	},
-	// }
-
-	// disable tools if code is gemini-3-flash-preview
-	// if m.model == "gemini-3-flash-preview" {
-	// 	tools = nil
-	// }
-
-	return &genai.GenerateContentConfig{
-		Temperature:     config.Temperature,
-		TopP:            config.TopP,
-		TopK:            config.TopK,
-		MaxOutputTokens: config.OutputLength,
-		// Tools:           tools,
+	if req.Config != nil {
+		if req.Config.Temperature != nil {
+			payload["temperature"] = *req.Config.Temperature
+		}
+		if req.Config.TopP != nil {
+			payload["top_p"] = *req.Config.TopP
+		}
+		if req.Config.OutputLength > 0 {
+			payload["max_tokens"] = req.Config.OutputLength
+		}
 	}
+	return payload
+}
+
+type openAIResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+type openAIStreamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+	} `json:"choices"`
 }

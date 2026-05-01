@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"encoding/json"
 	"io"
 	"log"
 	"os"
@@ -39,8 +40,9 @@ func newOpenRouterProvider(cfg *config.Config) (map[string]LLM, error) {
 	ctx := context.Background()
 	balancer := NewKeyBalancer(apiKeys)
 
+	baseURL := cfg.Models.OpenRouter.BaseURL
 	for _, code := range cfg.Models.OpenRouter.Codes {
-		model, err := NewOpenRouterModel(ctx, code, balancer)
+		model, err := NewOpenRouterModel(ctx, code, balancer, baseURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OpenRouter model '%s': %w", code, err)
 		}
@@ -51,17 +53,19 @@ func newOpenRouterProvider(cfg *config.Config) (map[string]LLM, error) {
 
 type OpenRouterModel struct {
 	model    string
+	baseURL  string
 	balancer *KeyBalancer
 }
 
-func NewOpenRouterModel(ctx context.Context, modelCode string, balancer *KeyBalancer) (*OpenRouterModel, error) {
+func NewOpenRouterModel(ctx context.Context, modelCode string, balancer *KeyBalancer, baseURL string) (*OpenRouterModel, error) {
 	return &OpenRouterModel{
 		model:    modelCode,
 		balancer: balancer,
+		baseURL:  baseURL,
 	}, nil
 }
 
-func (orm *OpenRouterModel) Generate(ctx context.Context, prompt string, images [][]byte, config *Config) (string, error) {
+func (orm *OpenRouterModel) Generate(ctx context.Context, req *Request) (string, error) {
 	if orm.balancer.KeyCount() == 0 {
 		return "", fmt.Errorf("%w: API key is required for OpenRouter", ErrConfiguration)
 	}
@@ -69,40 +73,30 @@ func (orm *OpenRouterModel) Generate(ctx context.Context, prompt string, images 
 	apiKey, keyIdx := orm.balancer.PickKey()
 	log.Printf("[%s] Attempting generation with API key #%d", orm.model, keyIdx)
 
-	/* TODO: don't support Image yet */
+	/* TODO: Image support is not yet implemented for OpenRouter provider */
 	client := openrouter.NewClient(apiKey)
-	req := openrouter.ChatCompletionRequest{
+	chatReq := openrouter.ChatCompletionRequest{
 		Model: orm.model,
-		Messages: []openrouter.ChatCompletionMessage{
-			openrouter.UserMessage(prompt),
-		},
+		Messages: orm.mapMessages(req.Messages),
 	}
 
-	if config != nil {
-		if config.Temperature != nil {
-			req.Temperature = *config.Temperature
-		}
-		if config.TopP != nil {
-			req.TopP = *config.TopP
-		}
-		if config.TopK != nil {
-			req.TopK = int(*config.TopK)
-		}
-		if config.OutputLength > 0 {
-			req.MaxCompletionTokens = int(config.OutputLength)
-		}
+	if req.Config != nil {
+		orm.applyConfig(&chatReq, req.Config)
 	}
 
-	response, err := client.CreateChatCompletion(ctx, req)
-
+	response, err := client.CreateChatCompletion(ctx, chatReq)
 	if err != nil {
 		return "", fmt.Errorf("OpenRouter API error: %w", err)
+	}
+
+	if len(response.Choices) == 0 {
+		return "", fmt.Errorf("%w: no choices in response", ErrGeneration)
 	}
 
 	return response.Choices[0].Message.Content.Text, nil
 }
 
-func (orm *OpenRouterModel) GenerateStream(ctx context.Context, prompt string, images [][]byte, config *Config) (<-chan string, <-chan error) {
+func (orm *OpenRouterModel) GenerateStream(ctx context.Context, req *Request) (<-chan string, <-chan error) {
 	outCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -119,63 +113,86 @@ func (orm *OpenRouterModel) GenerateStream(ctx context.Context, prompt string, i
 		log.Printf("[%s] Attempting stream generation with API key #%d", orm.model, keyIdx)
 
 		client := openrouter.NewClient(apiKey)
-		req := openrouter.ChatCompletionRequest{
+		chatReq := openrouter.ChatCompletionRequest{
 			Model: orm.model,
-			Messages: []openrouter.ChatCompletionMessage{
-				openrouter.UserMessage(prompt),
-			},
+			Messages: orm.mapMessages(req.Messages),
 			Stream: true,
 		}
 
-		if config != nil {
-			if config.Temperature != nil {
-				req.Temperature = *config.Temperature
-			}
-			if config.TopP != nil {
-				req.TopP = *config.TopP
-			}
-			if config.TopK != nil {
-				req.TopK = int(*config.TopK)
-			}
-			if config.OutputLength > 0 {
-				req.MaxCompletionTokens = int(config.OutputLength)
-			}
+		if req.Config != nil {
+			orm.applyConfig(&chatReq, req.Config)
 		}
-		stream, err := client.CreateChatCompletionStream(ctx, req)
 
+		stream, err := client.CreateChatCompletionStream(ctx, chatReq)
 		if err != nil && err != io.EOF {
 			errCh <- fmt.Errorf("OpenRouter API error: %w", err)
 			return
 		}
-
 		defer stream.Close()
 
 		for {
 			response, err := stream.Recv()
 			if err != nil {
+				if err != io.EOF {
+					log.Printf("Stream error for %s: %v", orm.model, err)
+				}
 				break
 			}
-			outCh <- response.Choices[0].Delta.Content
+			if len(response.Choices) > 0 {
+				outCh <- response.Choices[0].Delta.Content
+			}
 		}
 	}()
 
 	return outCh, errCh
 }
 
-func (orm *OpenRouterModel) CountTokens(prompt string) (int, error) {
-	/* 1 English character ≈ 0.3 token.
-	1 Chinese character ≈ 0.6 token. */
-	// loop via each char
-	var tokenConnt float32 = 0.0
-	for _, r := range prompt {
-		if r <= 127 {
-			// English char
-			tokenConnt += 0.3
-		} else {
-			// Non-English char
-			tokenConnt += 0.6
+func (orm *OpenRouterModel) mapMessages(msgs []any) []openrouter.ChatCompletionMessage {
+	result := make([]openrouter.ChatCompletionMessage, 0, len(msgs))
+	for _, m := range msgs {
+		// Since Messages come from the OpenAI compatible layer in HTTPServer,
+		// they are JSON-serializable map[string]any or the OpenAIChatMessage struct.
+		// We can use JSON marshalling as a robust way to convert if the underlying type is known.
+		data, err := json.Marshal(m)
+		if err != nil {
+			continue
+		}
+
+		var oaiMsg struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(data, &oaiMsg); err == nil {
+			result = append(result, openrouter.ChatCompletionMessage{Role: oaiMsg.Role, Content: openrouter.ChatCompletionContent{Text: oaiMsg.Content}})
 		}
 	}
-	return int(tokenConnt), nil
+	return result
+}
 
+func (orm *OpenRouterModel) applyConfig(chatReq *openrouter.ChatCompletionRequest, cfg *Config) {
+	if cfg.Temperature != nil {
+		chatReq.Temperature = *cfg.Temperature
+	}
+	if cfg.TopP != nil {
+		chatReq.TopP = *cfg.TopP
+	}
+	if cfg.TopK != nil {
+		chatReq.TopK = int(*cfg.TopK)
+	}
+	if cfg.OutputLength > 0 {
+		chatReq.MaxCompletionTokens = int(cfg.OutputLength)
+	}
+}
+
+func (orm *OpenRouterModel) CountTokens(prompt string) (int, error) {
+	/* Heuristic: 1 English character ≈ 0.3 token, 1 Non-English character ≈ 0.6 token. */
+	var tokenCount float32 = 0.0
+	for _, r := range prompt {
+		if r <= 127 {
+			tokenCount += 0.3
+			continue
+		}
+		tokenCount += 0.6
+	}
+	return int(tokenCount), nil
 }

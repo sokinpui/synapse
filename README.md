@@ -64,40 +64,6 @@ docker compose up -d
 
 The server will listen for HTTP requests on the port specified in `config.yaml`.
 
-## HTTP/REST API
-
-The server also exposes a REST/JSON API. You can send requests using `curl` or any HTTP client.
-
-List Models:
-
-```
-curl http://localhost:8080/models
-```
-
-**Generate (Non-Streaming):**
-
-```
-curl -X POST http://localhost:8080/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Why is the sky blue?",
-    "model_code": "gemini-2.5-flash",
-    "stream": false
-  }'
-```
-
-**Generate (Streaming via SSE):**
-
-```
-curl -X POST http://localhost:8080/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Write a long poem.",
-    "model_code": "gemini-2.5-flash",
-    "stream": true
-  }'
-```
-
 ## OpenAI Compatible API
 
 You can use any OpenAI-compatible client by pointing it to the Synapse server.

@@ -2,6 +2,13 @@ package model
 
 import "errors"
 
+// Request encapsulates all input data for a generation task.
+type Request struct {
+	Messages []any
+	Images [][]byte
+	Config *Config
+}
+
 // Config defines the generation configuration for a model.
 // All fields are optional.
 type Config struct {

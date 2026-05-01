@@ -21,6 +21,7 @@ type Config struct {
 }
 
 type ProviderConfig struct {
+	BaseURL string   `yaml:"base_url"`
 	Codes []string `yaml:"codes"`
 }
 
