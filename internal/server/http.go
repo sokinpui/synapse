@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/sokinpui/synapse.go/internal/broker"
 	"github.com/sokinpui/synapse.go/internal/color"
+	"github.com/sokinpui/synapse.go/internal/model"
 	"github.com/sokinpui/synapse.go/internal/models"
-	"github.com/sokinpui/synapse.go/model"
 )
 
 const sentinel = "[DONE]"

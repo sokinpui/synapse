@@ -12,9 +12,9 @@ import (
 
 	"github.com/sokinpui/synapse.go/internal/broker"
 	"github.com/sokinpui/synapse.go/internal/config"
+	"github.com/sokinpui/synapse.go/internal/model"
 	"github.com/sokinpui/synapse.go/internal/server"
 	"github.com/sokinpui/synapse.go/internal/worker"
-	"github.com/sokinpui/synapse.go/model"
 )
 
 func main() {
