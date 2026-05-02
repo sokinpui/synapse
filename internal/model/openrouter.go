@@ -36,13 +36,13 @@ func newOpenRouterProvider(cfg *config.Config) (map[string]LLM, error) {
 
 	baseURL := cfg.Models.OpenRouter.BaseURL
 	if baseURL == "" {
-		baseURL = "https://openrouter.ai/api/v1/chat/completions"
-	} else if !strings.HasSuffix(baseURL, "/chat/completions") {
-		baseURL = strings.TrimSuffix(baseURL, "/") + "/chat/completions"
+		baseURL = "https://openrouter.ai/api/v1"
 	}
 
+	endpointURL := buildChatEndpoint(baseURL)
+
 	for _, code := range cfg.Models.OpenRouter.Codes {
-		models[code] = NewOpenAIModel(code, baseURL, balancer)
+		models[code] = NewOpenAIModel(code, endpointURL, balancer)
 	}
 	return models, nil
 }

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sokinpui/synapse.go/internal/config"
 )
@@ -58,4 +59,8 @@ func (r *Registry) ListModels() []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func buildChatEndpoint(baseURL string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 }

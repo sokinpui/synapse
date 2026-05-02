@@ -7,7 +7,7 @@ worker:
 
 models:
   gemini:
-    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
     codes:
       - "gemini-3-flash-preview"
       - "gemini-3.1-flash-lite-preview"

@@ -32,11 +32,13 @@ func newGeminiProvider(cfg *config.Config) (map[string]LLM, error) {
 
 	baseURL := cfg.Models.Gemini.BaseURL
 	if baseURL == "" {
-		baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+		baseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
 	}
 
+	endpointURL := buildChatEndpoint(baseURL)
+
 	for _, code := range cfg.Models.Gemini.Codes {
-		models[code] = NewOpenAIModel(code, baseURL, balancer)
+		models[code] = NewOpenAIModel(code, endpointURL, balancer)
 	}
 
 	return models, nil
