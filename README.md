@@ -27,16 +27,20 @@ server:
   http_port: 8080
 
 worker:
-  # Multiple of CPU cores to use for processing requests
   concurrency_multiplier: 4
 
 models:
   gemini:
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     codes:
-      - "gemini-2.5-pro"
+      - "gemini-3-flash-preview"
+      - "gemini-3.1-flash-lite-preview"
+
   openrouter:
+    base_url: "https://openrouter.ai/api/v1"
     codes:
       - "z-ai/glm-4.5-air:free"
+      - "qwen/qwen3-coder:free"
 ```
 
 # API key for the underlying LLM provider
@@ -69,11 +73,13 @@ The server will listen for HTTP requests on the port specified in `config.yaml`.
 You can use any OpenAI-compatible client by pointing it to the Synapse server.
 
 **List Models:**
+
 ```
 curl http://localhost:8080/v1/models
 ```
 
 **Chat Completions:**
+
 ```
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
