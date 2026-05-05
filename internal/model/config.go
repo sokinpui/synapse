@@ -4,6 +4,7 @@ import "errors"
 
 // Request encapsulates all input data for a generation task.
 type Request struct {
+	TaskID   string
 	Messages []any
 	Images [][]byte
 	Config *Config

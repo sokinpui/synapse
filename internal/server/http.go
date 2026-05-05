@@ -61,7 +61,7 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 	}
 
 	taskID := uuid.New().String()
-	log.Printf("-> %s (OpenAI) [%s], assigned task_id: %s", color.BlueString("Received request"), oaiReq.Model, taskID)
+	log.Printf("-> %s: %s [%s]", color.BlueString("Received request"), taskID, oaiReq.Model)
 
 	messages := make([]any, len(oaiReq.Messages))
 	for i, m := range oaiReq.Messages {

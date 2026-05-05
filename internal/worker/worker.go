@@ -60,8 +60,7 @@ func (w *GenAIWorker) Run(ctx context.Context) {
 }
 
 func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask) {
-	log.Printf("-> %s task: %s [%s]", color.YellowString("Processing"), task.TaskID, task.ModelCode)
-	defer log.Printf("<- %s task: %s [%s]", color.GreenString("Finished"), task.TaskID, task.ModelCode)
+	defer log.Printf("<- %s: %s [%s]", color.GreenString("Finished Request"), task.TaskID, task.ModelCode)
 
 	taskCtx, cancelTask := context.WithCancel(ctx)
 	defer cancelTask()
@@ -110,9 +109,10 @@ func (w *GenAIWorker) listenForCancellation(ctx context.Context, taskID string, 
 
 func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
+		TaskID:   task.TaskID,
 		Messages: task.Messages,
-		Images: task.Images,
-		Config: task.Config,
+		Images:   task.Images,
+		Config:   task.Config,
 	}
 	result, err := llm.Generate(ctx, req)
 	if err != nil {
@@ -124,9 +124,10 @@ func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, ll
 
 func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
+		TaskID:   task.TaskID,
 		Messages: task.Messages,
-		Images: task.Images,
-		Config: task.Config,
+		Images:   task.Images,
+		Config:   task.Config,
 	}
 	outCh, errCh := llm.GenerateStream(ctx, req)
 

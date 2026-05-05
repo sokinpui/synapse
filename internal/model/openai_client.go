@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/sokinpui/synapse.go/internal/color"
 )
 
 // OpenAIModel is a generic implementation of the LLM interface for OpenAI-compatible APIs.
@@ -43,7 +45,7 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error
 		}
 
 		apiKey, keyIdx := m.balancer.PickKey()
-		log.Printf("[%s] Attempting generation with API key #%d", m.modelCode, keyIdx)
+		log.Printf("-> %s: %s [%s], try API key #%d", color.YellowString("Processing request"), req.TaskID, m.modelCode, keyIdx)
 
 		httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(bodyBytes))
 		if err != nil {
@@ -101,7 +103,7 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 			}
 
 			apiKey, keyIdx := m.balancer.PickKey()
-			log.Printf("[%s] Attempting stream generation with API key #%d", m.modelCode, keyIdx)
+			log.Printf("-> %s: %s [%s], try API key #%d", color.YellowString("Processing request"), req.TaskID, m.modelCode, keyIdx)
 
 			httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(bodyBytes))
 			if err != nil {
