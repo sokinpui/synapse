@@ -4,7 +4,7 @@ services:
     image: synapse
     container_name: synapse
     ports:
-      - "8080:8080"
+      - "9001:9001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
