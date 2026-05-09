@@ -9,6 +9,13 @@ echo "Building binaries..."
 GOWORK=off go build -o bin/server ./cmd/server
 echo "Build complete. Binaries are in the 'bin' directory."
 
+if [ -f .env ]; then
+  echo "Loading environment variables from .env file..."
+  set -a
+  source .env
+  set +a
+fi
+
 # for local deploy, use vpn proxy
 export http_proxy=http://127.0.0.1:1087
 export https_proxy=http://127.0.0.1:1087
