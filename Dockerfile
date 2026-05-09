@@ -13,17 +13,14 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /bin/synapse-server ./cmd/server
 
 # Runtime Stage
-FROM ubuntu:24.04
+FROM debian:bookworm-slim
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /bin/synapse-server .
 COPY --from=builder /src/config.yaml .
 
-EXPOSE 8080
+EXPOSE 9001
 
 ENTRYPOINT ["./synapse-server"]
