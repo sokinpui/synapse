@@ -18,17 +18,13 @@ func newOpenRouterProvider(cfg *config.Config) (map[string]LLM, error) {
 		apiKeysVar = os.Getenv("OPENROUTER_API_KEY")
 	}
 
-	rawKeys := strings.FieldsFunc(apiKeysVar, func(r rune) bool {
-		return r == ',' || r == '\n' || r == '\r' || r == '\t' || r == ' ' || r == '\\'
-	})
-
 	var apiKeys []string
-	for _, k := range rawKeys {
-		if trimmed := strings.TrimSpace(k); trimmed != "" {
-			apiKeys = append(apiKeys, trimmed)
-		}
-	}
+	normalized := strings.ReplaceAll(apiKeysVar, ",", "\n")
+	rawKeys := strings.Split(normalized, "\n")
 
+	for _, k := range rawKeys {
+		apiKeys = append(apiKeys, strings.TrimSpace(k))
+	}
 	log.Printf("OpenRouter provider initialized with %d API keys", len(apiKeys))
 
 	models := make(map[string]LLM)
