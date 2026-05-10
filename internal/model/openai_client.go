@@ -45,7 +45,7 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error
 		}
 
 		apiKey, keyIdx := m.balancer.PickKey()
-		log.Printf("-> %s: %s [%s], try API key #%d", color.YellowString("Processing request"), req.TaskID, m.modelCode, keyIdx)
+		log.Printf("-> %s: %s [%s], try API key #%d", color.BlueString("Processing request"), color.YellowString(req.TaskID), m.modelCode, keyIdx)
 
 		httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(bodyBytes))
 		if err != nil {
@@ -103,7 +103,7 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 			}
 
 			apiKey, keyIdx := m.balancer.PickKey()
-			log.Printf("-> %s: %s [%s], try API key #%d", color.YellowString("Processing request"), req.TaskID, m.modelCode, keyIdx)
+			log.Printf("-> %s: %s [%s], try API key #%d", color.BlueString("Processing request"), color.YellowString(req.TaskID), m.modelCode, keyIdx)
 
 			httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(bodyBytes))
 			if err != nil {

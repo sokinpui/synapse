@@ -33,7 +33,7 @@ func New(b *broker.MemoryBroker, llmRegistry *model.Registry, concurrency int) *
 }
 
 func (w *GenAIWorker) Run(ctx context.Context) {
-	log.Printf("%s started. Waiting for tasks... (concurrency: %d)", w.workerID, w.concurrency)
+	log.Printf("%s started. Waiting for tasks... (concurrency: %d)", color.YellowString(w.workerID), w.concurrency)
 
 	taskCh := w.broker.Dequeue()
 	var wg sync.WaitGroup
@@ -60,7 +60,7 @@ func (w *GenAIWorker) Run(ctx context.Context) {
 }
 
 func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask) {
-	defer log.Printf("<- %s: %s [%s]", color.GreenString("Finished Request"), task.TaskID, task.ModelCode)
+	defer log.Printf("<- %s: %s [%s]", color.BlueString("Finished Request"), color.YellowString(task.TaskID), task.ModelCode)
 
 	taskCtx, cancelTask := context.WithCancel(ctx)
 	defer cancelTask()
