@@ -41,3 +41,10 @@ func Load() *Config {
 
 	return &cfg
 }
+
+func (c *Config) GetOrderedModelCodes() []string {
+	var codes []string
+	codes = append(codes, c.Models.Gemini.Codes...)
+	codes = append(codes, c.Models.OpenRouter.Codes...)
+	return codes
+}

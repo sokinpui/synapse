@@ -23,7 +23,8 @@ func RegisterProvider(provider ModelProvider) {
 }
 
 type Registry struct {
-	models map[string]LLM
+	models     map[string]LLM
+	modelCodes []string
 }
 
 func New(cfg *config.Config) (*Registry, error) {
@@ -42,7 +43,15 @@ func New(cfg *config.Config) (*Registry, error) {
 		}
 	}
 
-	return &Registry{models: allModels}, nil
+	ordered := cfg.GetOrderedModelCodes()
+	var finalOrder []string
+	for _, code := range ordered {
+		if _, ok := allModels[code]; ok {
+			finalOrder = append(finalOrder, code)
+		}
+	}
+
+	return &Registry{models: allModels, modelCodes: finalOrder}, nil
 }
 
 func (r *Registry) GetModel(modelCode string) (LLM, error) {
@@ -54,11 +63,7 @@ func (r *Registry) GetModel(modelCode string) (LLM, error) {
 }
 
 func (r *Registry) ListModels() []string {
-	keys := make([]string, 0, len(r.models))
-	for k := range r.models {
-		keys = append(keys, k)
-	}
-	return keys
+	return r.modelCodes
 }
 
 func buildChatEndpoint(baseURL string) string {
