@@ -37,6 +37,8 @@ func (s *HTTPServer) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Request) {
+	log.Printf("-> %s %s", color.BlueString(r.Method), r.URL.Path)
+
 	modelCodes := s.llmRegistry.ListModels()
 	now := time.Now().Unix()
 	data := make([]OpenAIModel, len(modelCodes))
@@ -61,7 +63,7 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 	}
 
 	taskID := uuid.New().String()
-	log.Printf("-> %s: %s [%s]", color.BlueString("Received request"), taskID, oaiReq.Model)
+	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
 
 	messages := make([]any, len(oaiReq.Messages))
 	for i, m := range oaiReq.Messages {
