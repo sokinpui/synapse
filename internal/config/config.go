@@ -26,11 +26,14 @@ type ProviderConfig struct {
 }
 
 // Load reads configuration from the YAML file.
-func Load() *Config {
-	path := "config.yaml"
+func Load(path string) *Config {
+	if path == "" {
+		path = "config.yaml"
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("failed to read config file at %s: %v. Make sure it exists.", path, err)
+		log.Fatalf("failed to read config file at %s: %v", path, err)
 	}
 
 	var cfg Config
