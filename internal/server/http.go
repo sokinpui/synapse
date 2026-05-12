@@ -58,20 +58,25 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var head struct {
-		Model  string `json:"model"`
-		Stream bool   `json:"stream"`
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
 	}
-	_ = json.Unmarshal(body, &head)
+
+	modelCode, _ := payload["model"].(string)
+	stream, _ := payload["stream"].(bool)
+	s.ensureThoughtSignatures(payload)
+	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
 	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
 
 	t := &task.GenerationTask{
 		TaskID:    taskID,
-		ModelCode: head.Model,
-		Stream:    head.Stream,
-		Payload:   body,
+		ModelCode: modelCode,
+		Stream:    stream,
+		Payload:   modifiedBody,
 	}
 
 	resCh := s.broker.Subscribe(taskID)
@@ -83,6 +88,53 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 		return
 	}
 	s.redirectRawResult(w, resCh)
+}
+
+func (s *HTTPServer) ensureThoughtSignatures(payload map[string]any) {
+	messages, ok := payload["messages"].([]any)
+	if !ok {
+		return
+	}
+
+	for _, m := range messages {
+		msg, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		toolCalls, ok := msg["tool_calls"].([]any)
+		if !ok || len(toolCalls) == 0 {
+			continue
+		}
+
+		// Gemini requires a thought_signature on the first tool call of a response turn.
+		// If missing (common in OpenAI clients), we inject a dummy to bypass validation.
+		firstCall, ok := toolCalls[0].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if !hasGoogleSignature(firstCall) {
+			injectDummySignature(firstCall)
+		}
+	}
+}
+
+func hasGoogleSignature(toolCall map[string]any) bool {
+	extra, ok := toolCall["extra_content"].(map[string]any)
+	if !ok { return false }
+	google, ok := extra["google"].(map[string]any)
+	if !ok { return false }
+	_, exists := google["thought_signature"]
+	return exists
+}
+
+func injectDummySignature(toolCall map[string]any) {
+	toolCall["extra_content"] = map[string]any{
+		"google": map[string]any{
+			"thought_signature": "skip_thought_signature_validator",
+		},
+	}
 }
 
 func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan *model.Result) {
