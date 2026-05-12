@@ -1,34 +1,23 @@
 package model
 
-import "errors"
+import (
+	"encoding/json"
+	"errors"
+)
 
 // Request encapsulates all input data for a generation task.
 type Request struct {
-	TaskID   string
-	Messages []any
-	Images [][]byte
-	Config *Config
-}
-
-// Usage tracks token consumption.
-type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	TaskID  string
+	Payload json.RawMessage
 }
 
 type Result struct {
-	Content string
-	Usage   *Usage
-}
-
-// Config defines the generation configuration for a model.
-// All fields are optional.
-type Config struct {
-	Temperature  *float32 `json:"temperature,omitempty"`
-	TopP         *float32 `json:"top_p,omitempty"`
-	TopK         *float32 `json:"top_k,omitempty"`
-	OutputLength int32    `json:"output_length,omitempty"`
+	// Raw contains the raw JSON fragment or full response
+	Raw json.RawMessage
+	// IsError indicates if the result represents a provider error
+	IsError bool
+	// IsDone indicates the end of a stream
+	IsDone bool
 }
 
 // Custom errors for the library.

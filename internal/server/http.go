@@ -2,11 +2,9 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,30 +52,26 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 
 
 func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
-	var oaiReq OpenAIChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&oaiReq); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusInternalServerError)
 		return
 	}
+
+	var head struct {
+		Model  string `json:"model"`
+		Stream bool   `json:"stream"`
+	}
+	_ = json.Unmarshal(body, &head)
 
 	taskID := uuid.New().String()
 	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
 
-	messages := make([]any, len(oaiReq.Messages))
-	for i, m := range oaiReq.Messages {
-		messages[i] = m
-	}
-
 	t := &task.GenerationTask{
 		TaskID:    taskID,
-		Messages:  messages,
-		ModelCode: oaiReq.Model,
-		Stream:    oaiReq.Stream,
-		Config: &model.Config{
-			Temperature:  oaiReq.Temperature,
-			TopP:         oaiReq.TopP,
-			OutputLength: oaiReq.MaxTokens,
-		},
+		ModelCode: head.Model,
+		Stream:    head.Stream,
+		Payload:   body,
 	}
 
 	resCh := s.broker.Subscribe(taskID)
@@ -88,9 +82,8 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 		s.streamOpenAIResults(w, r, t, resCh)
 		return
 	}
-	s.aggregateOpenAIResults(w, t, resCh)
+	s.redirectRawResult(w, resCh)
 }
-
 
 func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan *model.Result) {
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -103,130 +96,27 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	now := time.Now().Unix()
-	first := true
-	var lastUsage *model.Usage
-
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case data, ok := <-ch:
-			if !ok || data == nil {
-				stop := "stop"
-				finalChunk := ChatCompletionChunk{
-					ID:      fmt.Sprintf("chatcmpl-%s", t.TaskID),
-					Object:  "chat.completion.chunk",
-					Created: now,
-					Model:   t.ModelCode,
-					Choices: []ChunkChoice{
-						{
-							Index:        0,
-							Delta:        OpenAIChatMessage{},
-							FinishReason: &stop,
-						},
-					},
-				}
-				if lastUsage != nil {
-					finalChunk.Usage = &Usage{
-						PromptTokens:     lastUsage.PromptTokens,
-						CompletionTokens: lastUsage.CompletionTokens,
-						TotalTokens:      lastUsage.TotalTokens,
-					}
-				}
-
-				if jsonData, err := json.Marshal(finalChunk); err == nil {
-					fmt.Fprintf(w, "data: %s\n\n", jsonData)
-					flusher.Flush()
-				}
-
+			if !ok || data == nil || data.IsDone {
 				io.WriteString(w, "data: [DONE]\n\n")
 				flusher.Flush()
 				return
 			}
-
-			if data.Usage != nil {
-				lastUsage = data.Usage
-			}
-			if data.Content == "" { continue }
-
-			chunk := ChatCompletionChunk{
-				ID:      fmt.Sprintf("chatcmpl-%s", t.TaskID),
-				Object:  "chat.completion.chunk",
-				Created: now,
-				Model:   t.ModelCode,
-			}
-
-			delta := OpenAIChatMessage{Content: data.Content}
-			if first {
-				delta.Role = "assistant"
-				first = false
-			}
-
-			chunk.Choices = []ChunkChoice{
-				{
-					Index:        0,
-					Delta:        delta,
-					FinishReason: nil,
-				},
-			}
-
-			jsonData, err := json.Marshal(chunk)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(w, "data: %s\n\n", jsonData)
+			io.WriteString(w, "data: ")
+			w.Write(data.Raw)
+			io.WriteString(w, "\n\n")
 			flusher.Flush()
 		}
 	}
 }
 
-func (s *HTTPServer) aggregateOpenAIResults(w http.ResponseWriter, t *task.GenerationTask, ch <-chan *model.Result) {
-	var sb strings.Builder
-	var lastUsage *model.Usage
-
-	for data := range ch {
-		if data == nil {
-			break
-		}
-		sb.WriteString(data.Content)
-		if data.Usage != nil {
-			lastUsage = data.Usage
-		}
-	}
-
-	now := time.Now().Unix()
-
-	resp := OpenAIChatResponse{
-		ID:      fmt.Sprintf("chatcmpl-%s", t.TaskID),
-		Object:  "chat.completion",
-		Created: now,
-		Model:   t.ModelCode,
-		Choices: []Choice{
-			{
-				Index: 0,
-				Message: OpenAIChatMessage{
-					Role:    "assistant",
-					Content: sb.String(),
-				},
-				FinishReason: "stop",
-			},
-		},
-		Usage: Usage{
-			PromptTokens:     -1,
-			CompletionTokens: -1,
-			TotalTokens:      -1,
-		},
-	}
-
-	if lastUsage != nil {
-		resp.Usage = Usage{
-			PromptTokens:     lastUsage.PromptTokens,
-			CompletionTokens: lastUsage.CompletionTokens,
-			TotalTokens:      lastUsage.TotalTokens,
-		}
-	}
-
+func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *model.Result) {
+	data := <-ch
+	if data == nil { return }
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	w.Write(data.Raw)
 }

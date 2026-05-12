@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -74,8 +75,7 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 	llm, err := w.llmRegistry.GetModel(task.ModelCode)
 	if err != nil {
 		log.Printf("Error getting model for task %s: %v", task.TaskID, err)
-		errMsg := fmt.Sprintf("Error: %v", err)
-		w.broker.Publish(resultChannel, &model.Result{Content: errMsg})
+		w.publishError(resultChannel, err)
 		return
 	}
 
@@ -91,8 +91,7 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 			return
 		}
 		log.Printf("Error processing generation task %s: %v", task.TaskID, err)
-		errMsg := fmt.Sprintf("Error: %v", err)
-		w.broker.Publish(resultChannel, &model.Result{Content: errMsg})
+		w.publishError(resultChannel, err)
 	}
 }
 
@@ -105,12 +104,20 @@ func (w *GenAIWorker) listenForCancellation(ctx context.Context, taskID string, 
 	}
 }
 
+func (w *GenAIWorker) publishError(taskID string, err error) {
+	errJSON, _ := json.Marshal(map[string]any{
+		"error": map[string]any{
+			"message": err.Error(),
+			"type":    "synapse_error",
+		},
+	})
+	w.broker.Publish(taskID, &model.Result{Raw: errJSON, IsError: true})
+}
+
 func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
-		TaskID:   task.TaskID,
-		Messages: task.Messages,
-		Images:   task.Images,
-		Config:   task.Config,
+		TaskID:  task.TaskID,
+		Payload: task.Payload,
 	}
 	result, err := llm.Generate(ctx, req)
 	if err != nil {
@@ -122,10 +129,8 @@ func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, ll
 
 func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
-		TaskID:   task.TaskID,
-		Messages: task.Messages,
-		Images:   task.Images,
-		Config:   task.Config,
+		TaskID:  task.TaskID,
+		Payload: task.Payload,
 	}
 	outCh, errCh := llm.GenerateStream(ctx, req)
 
