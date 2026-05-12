@@ -8,6 +8,7 @@ worker:
 models:
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+    env: GENAI_API_KEYS
     codes:
       - "gemini-3.1-pro-preview"
       - "gemini-pro-latest"
@@ -32,14 +33,15 @@ models:
 
   # openrouter:
   #   base_url: "https://openrouter.ai/api/v1"
+  #   env: OPENROUTER_API_KEY
   #   codes:
-      # - "z-ai/glm-4.5-air:free"
-      # - "qwen/qwen3-coder:free"
-      # - "tngtech/deepseek-r1t2-chimera:free"
-      # - "x-ai/grok-4.1-fast:free"
-      # - "kwaipilot/kat-coder-pro:free"
-      # - "deepseek/deepseek-r1-0528:free"
-      # - "tngtech/deepseek-r1t-chimera:free"
-      # - "microsoft/mai-ds-r1:free"
-      # - "deepseek/deepseek-chat-v3-0324:free"
-      # - "deepseek/deepseek-r1:free"
+  #     - "z-ai/glm-4.5-air:free"
+  #     - "qwen/qwen3-coder:free"
+  #     - "tngtech/deepseek-r1t2-chimera:free"
+  #     - "x-ai/grok-4.1-fast:free"
+  #     - "kwaipilot/kat-coder-pro:free"
+  #     - "deepseek/deepseek-r1-0528:free"
+  #     - "tngtech/deepseek-r1t-chimera:free"
+  #     - "microsoft/mai-ds-r1:free"
+  #     - "deepseek/deepseek-chat-v3-0324:free"
+  #     - "deepseek/deepseek-r1:free"

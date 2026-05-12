@@ -14,14 +14,12 @@ type Config struct {
 	Worker struct {
 		ConcurrencyMultiplier int `yaml:"concurrency_multiplier"`
 	} `yaml:"worker"`
-	Models struct {
-		Gemini     ProviderConfig `yaml:"gemini"`
-		OpenRouter ProviderConfig `yaml:"openrouter"`
-	} `yaml:"models"`
+	Models map[string]ProviderConfig `yaml:"models"`
 }
 
 type ProviderConfig struct {
 	BaseURL string   `yaml:"base_url"`
+	Env     string   `yaml:"env"`
 	Codes []string `yaml:"codes"`
 }
 
@@ -47,7 +45,8 @@ func Load(path string) *Config {
 
 func (c *Config) GetOrderedModelCodes() []string {
 	var codes []string
-	codes = append(codes, c.Models.Gemini.Codes...)
-	codes = append(codes, c.Models.OpenRouter.Codes...)
+	for _, provider := range c.Models {
+		codes = append(codes, provider.Codes...)
+	}
 	return codes
 }
