@@ -37,9 +37,9 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 
 	modelCodes := s.llmRegistry.ListModels()
 	now := time.Now().Unix()
-	data := make([]OpenAIModel, len(modelCodes))
+	data := make([]model.ModelJSON, len(modelCodes))
 	for i, m := range modelCodes {
-		data[i] = OpenAIModel{
+		data[i] = model.ModelJSON{
 			ID:      m,
 			Object:  "model",
 			Created: now,
@@ -47,7 +47,7 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(OpenAIModelList{Object: "list", Data: data})
+	json.NewEncoder(w).Encode(model.ModelListJSON{Object: "list", Data: data})
 }
 
 

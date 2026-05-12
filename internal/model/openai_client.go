@@ -6,12 +6,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/sokinpui/synapse.go/internal/color"
 )
+
+type ModelListJSON struct {
+	Object string      `json:"object"`
+	Data   []ModelJSON `json:"data"`
+}
+
+type ModelJSON struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
 
 // OpenAIModel is a generic implementation of the LLM interface for OpenAI-compatible APIs.
 type OpenAIModel struct {
