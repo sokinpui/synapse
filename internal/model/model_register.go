@@ -9,8 +9,8 @@ import (
 )
 
 type LLM interface {
-	Generate(ctx context.Context, req *Request) (string, error)
-	GenerateStream(ctx context.Context, req *Request) (<-chan string, <-chan error)
+	Generate(ctx context.Context, req *Request) (*Result, error)
+	GenerateStream(ctx context.Context, req *Request) (<-chan *Result, <-chan error)
 	CountTokens(prompt string) (int, error)
 }
 

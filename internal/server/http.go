@@ -16,8 +16,6 @@ import (
 	"github.com/sokinpui/synapse.go/internal/task"
 )
 
-const sentinel = "[DONE]"
-
 type HTTPServer struct {
 	broker      *broker.MemoryBroker
 	llmRegistry *model.Registry
@@ -94,7 +92,7 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 }
 
 
-func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan string) {
+func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan *model.Result) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -107,13 +105,14 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 
 	now := time.Now().Unix()
 	first := true
+	var lastUsage *model.Usage
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case data, ok := <-ch:
-			if !ok || data == sentinel {
+			if !ok || data == nil {
 				stop := "stop"
 				finalChunk := ChatCompletionChunk{
 					ID:      fmt.Sprintf("chatcmpl-%s", t.TaskID),
@@ -128,6 +127,13 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 						},
 					},
 				}
+				if lastUsage != nil {
+					finalChunk.Usage = &Usage{
+						PromptTokens:     lastUsage.PromptTokens,
+						CompletionTokens: lastUsage.CompletionTokens,
+						TotalTokens:      lastUsage.TotalTokens,
+					}
+				}
 
 				if jsonData, err := json.Marshal(finalChunk); err == nil {
 					fmt.Fprintf(w, "data: %s\n\n", jsonData)
@@ -139,6 +145,11 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 				return
 			}
 
+			if data.Usage != nil {
+				lastUsage = data.Usage
+			}
+			if data.Content == "" { continue }
+
 			chunk := ChatCompletionChunk{
 				ID:      fmt.Sprintf("chatcmpl-%s", t.TaskID),
 				Object:  "chat.completion.chunk",
@@ -146,7 +157,7 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 				Model:   t.ModelCode,
 			}
 
-			delta := OpenAIChatMessage{Content: data}
+			delta := OpenAIChatMessage{Content: data.Content}
 			if first {
 				delta.Role = "assistant"
 				first = false
@@ -170,13 +181,18 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (s *HTTPServer) aggregateOpenAIResults(w http.ResponseWriter, t *task.GenerationTask, ch <-chan string) {
+func (s *HTTPServer) aggregateOpenAIResults(w http.ResponseWriter, t *task.GenerationTask, ch <-chan *model.Result) {
 	var sb strings.Builder
+	var lastUsage *model.Usage
+
 	for data := range ch {
-		if data == sentinel {
+		if data == nil {
 			break
 		}
-		sb.WriteString(data)
+		sb.WriteString(data.Content)
+		if data.Usage != nil {
+			lastUsage = data.Usage
+		}
 	}
 
 	now := time.Now().Unix()
@@ -197,10 +213,18 @@ func (s *HTTPServer) aggregateOpenAIResults(w http.ResponseWriter, t *task.Gener
 			},
 		},
 		Usage: Usage{
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
+			PromptTokens:     -1,
+			CompletionTokens: -1,
+			TotalTokens:      -1,
 		},
+	}
+
+	if lastUsage != nil {
+		resp.Usage = Usage{
+			PromptTokens:     lastUsage.PromptTokens,
+			CompletionTokens: lastUsage.CompletionTokens,
+			TotalTokens:      lastUsage.TotalTokens,
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

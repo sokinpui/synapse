@@ -10,6 +10,18 @@ type Request struct {
 	Config *Config
 }
 
+// Usage tracks token consumption.
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+type Result struct {
+	Content string
+	Usage   *Usage
+}
+
 // Config defines the generation configuration for a model.
 // All fields are optional.
 type Config struct {

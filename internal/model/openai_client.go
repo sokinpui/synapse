@@ -30,9 +30,9 @@ func NewOpenAIModel(modelCode, baseURL string, balancer *KeyBalancer) *OpenAIMod
 	}
 }
 
-func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error) {
+func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (*Result, error) {
 	if m.balancer.KeyCount() == 0 {
-		return "", fmt.Errorf("%w: API key is required", ErrConfiguration)
+		return nil, fmt.Errorf("%w: API key is required", ErrConfiguration)
 	}
 
 	var lastErr error
@@ -41,7 +41,7 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error
 
 	for i := 0; i < m.balancer.KeyCount(); i++ {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		}
 
 		apiKey, keyIdx := m.balancer.PickKey()
@@ -49,7 +49,7 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error
 
 		httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(bodyBytes))
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
 		m.setHeaders(httpReq, apiKey)
@@ -72,15 +72,22 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (string, error
 		}
 
 		if len(oaiResp.Choices) > 0 {
-			return oaiResp.Choices[0].Message.Content, nil
+			return &Result{
+				Content: oaiResp.Choices[0].Message.Content,
+				Usage: &Usage{
+					PromptTokens:     oaiResp.Usage.PromptTokens,
+					CompletionTokens: oaiResp.Usage.CompletionTokens,
+					TotalTokens:      oaiResp.Usage.TotalTokens,
+				},
+			}, nil
 		}
 	}
 
-	return "", fmt.Errorf("all API keys failed: %w", lastErr)
+	return nil, fmt.Errorf("all API keys failed: %w", lastErr)
 }
 
-func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan string, <-chan error) {
-	outCh := make(chan string)
+func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan *Result, <-chan error) {
+	outCh := make(chan *Result)
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -136,7 +143,17 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 				}
 				var chunk openAIStreamChunk
 				if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
-					outCh <- chunk.Choices[0].Delta.Content
+					res := &Result{Content: chunk.Choices[0].Delta.Content}
+					if chunk.Usage != nil {
+						res.Usage = &Usage{
+							PromptTokens:     chunk.Usage.PromptTokens,
+							CompletionTokens: chunk.Usage.CompletionTokens,
+							TotalTokens:      chunk.Usage.TotalTokens,
+						}
+					}
+					outCh <- res
+				} else if err == nil && chunk.Usage != nil {
+					outCh <- &Result{Usage: &Usage{PromptTokens: chunk.Usage.PromptTokens, CompletionTokens: chunk.Usage.CompletionTokens, TotalTokens: chunk.Usage.TotalTokens}}
 				}
 			}
 			resp.Body.Close()
@@ -164,6 +181,12 @@ func (m *OpenAIModel) buildPayload(req *Request, stream bool) map[string]any {
 		"stream":   stream,
 	}
 
+	if stream {
+		payload["stream_options"] = map[string]any{
+			"include_usage": true,
+		}
+	}
+
 	if req.Config == nil {
 		return payload
 	}
@@ -187,6 +210,7 @@ type openAIResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage openAIUsage `json:"usage"`
 }
 
 type openAIStreamChunk struct {
@@ -195,4 +219,11 @@ type openAIStreamChunk struct {
 			Content string `json:"content"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Usage *openAIUsage `json:"usage,omitempty"`
+}
+
+type openAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }

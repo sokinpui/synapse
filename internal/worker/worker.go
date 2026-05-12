@@ -13,8 +13,6 @@ import (
 	"github.com/sokinpui/synapse.go/internal/task"
 )
 
-const sentinel = "[DONE]"
-
 // GenAIWorker dequeues and processes generation tasks.
 type GenAIWorker struct {
 	workerID    string
@@ -70,14 +68,14 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 	resultChannel := task.TaskID
 
 	defer func() {
-		w.broker.Publish(resultChannel, sentinel)
+		w.broker.Publish(resultChannel, nil)
 	}()
 
 	llm, err := w.llmRegistry.GetModel(task.ModelCode)
 	if err != nil {
 		log.Printf("Error getting model for task %s: %v", task.TaskID, err)
 		errMsg := fmt.Sprintf("Error: %v", err)
-		w.broker.Publish(resultChannel, errMsg)
+		w.broker.Publish(resultChannel, &model.Result{Content: errMsg})
 		return
 	}
 
@@ -94,7 +92,7 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 		}
 		log.Printf("Error processing generation task %s: %v", task.TaskID, err)
 		errMsg := fmt.Sprintf("Error: %v", err)
-		w.broker.Publish(resultChannel, errMsg)
+		w.broker.Publish(resultChannel, &model.Result{Content: errMsg})
 	}
 }
 
