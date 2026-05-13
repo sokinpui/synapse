@@ -8,6 +8,7 @@ import (
 // Request encapsulates all input data for a generation task.
 type Request struct {
 	TaskID  string
+	Endpoint string
 	Payload json.RawMessage
 }
 

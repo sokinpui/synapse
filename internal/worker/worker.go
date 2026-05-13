@@ -117,6 +117,7 @@ func (w *GenAIWorker) publishError(taskID string, err error) {
 func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
 		TaskID:  task.TaskID,
+		Endpoint: task.Endpoint,
 		Payload: task.Payload,
 	}
 	result, err := llm.Generate(ctx, req)
@@ -130,6 +131,7 @@ func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, ll
 func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
 	req := &model.Request{
 		TaskID:  task.TaskID,
+		Endpoint: task.Endpoint,
 		Payload: task.Payload,
 	}
 	outCh, errCh := llm.GenerateStream(ctx, req)

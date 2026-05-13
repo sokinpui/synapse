@@ -48,6 +48,8 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (*Result, erro
 		return nil, fmt.Errorf("%w: API key is required", ErrConfiguration)
 	}
 
+	targetURL := m.buildURL(req.Endpoint)
+
 	var lastErr error
 	for i := 0; i < m.balancer.KeyCount(); i++ {
 		if ctx.Err() != nil {
@@ -55,9 +57,12 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (*Result, erro
 		}
 
 		apiKey, keyIdx := m.balancer.PickKey()
-		log.Printf("-> %s: %s [%s], try API key #%d", color.BlueString("Processing request"), color.YellowString(req.TaskID), m.modelCode, keyIdx)
+		log.Printf("-> %s: %s [%s] -> %s, try API key #%d", 
+			color.BlueString("Processing request"), 
+			color.YellowString(req.TaskID), 
+			m.modelCode, req.Endpoint, keyIdx)
 
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(req.Payload))
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(req.Payload))
 		if err != nil {
 			return nil, err
 		}
@@ -99,6 +104,8 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 			return
 		}
 
+		targetURL := m.buildURL(req.Endpoint)
+
 		var lastErr error
 		for i := 0; i < m.balancer.KeyCount(); i++ {
 			if ctx.Err() != nil {
@@ -107,9 +114,12 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 			}
 
 			apiKey, keyIdx := m.balancer.PickKey()
-			log.Printf("-> %s: %s [%s], try API key #%d", color.BlueString("Processing request"), color.YellowString(req.TaskID), m.modelCode, keyIdx)
+			log.Printf("-> %s: %s [%s] -> %s, try API key #%d", 
+				color.BlueString("Processing request"), 
+				color.YellowString(req.TaskID), 
+				m.modelCode, req.Endpoint, keyIdx)
 
-			httpReq, err := http.NewRequestWithContext(ctx, "POST", m.baseURL, bytes.NewReader(req.Payload))
+			httpReq, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(req.Payload))
 			if err != nil {
 				errCh <- err
 				return
@@ -159,4 +169,8 @@ func (m *OpenAIModel) CountTokens(prompt string) (int, error) {
 func (m *OpenAIModel) setHeaders(req *http.Request, apiKey string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+}
+
+func (m *OpenAIModel) buildURL(endpoint string) string {
+	return strings.TrimSuffix(m.baseURL, "/") + "/" + strings.TrimPrefix(endpoint, "/")
 }

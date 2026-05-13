@@ -30,6 +30,7 @@ func (s *HTTPServer) RegisterRoutes(mux *http.ServeMux) {
 	// OpenAI Compatible API
 	mux.HandleFunc("GET /v1/models", s.handleOpenAIListModels)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleOpenAIChatCompletions)
+	mux.HandleFunc("POST /v1/images/generations", s.handleOpenAIImageGenerations)
 }
 
 func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +50,6 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(model.ModelListJSON{Object: "list", Data: data})
 }
-
 
 func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
@@ -75,6 +75,7 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 	t := &task.GenerationTask{
 		TaskID:    taskID,
 		ModelCode: modelCode,
+		Endpoint:  "/chat/completions",
 		Stream:    stream,
 		Payload:   modifiedBody,
 	}
@@ -87,6 +88,40 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 		s.streamOpenAIResults(w, r, t, resCh)
 		return
 	}
+	s.redirectRawResult(w, resCh)
+}
+
+func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusInternalServerError)
+		return
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	modelCode, _ := payload["model"].(string)
+	taskID := uuid.New().String()
+	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
+
+	// Image generation typically isn't streamed in standard OpenAI API
+	t := &task.GenerationTask{
+		TaskID:    taskID,
+		ModelCode: modelCode,
+		Endpoint:  "/images/generations",
+		Stream:    false,
+		Payload:   body,
+	}
+
+	resCh := s.broker.Subscribe(taskID)
+	defer s.broker.Unsubscribe(taskID)
+
+	s.broker.Enqueue(t)
+
 	s.redirectRawResult(w, resCh)
 }
 
@@ -122,9 +157,13 @@ func (s *HTTPServer) ensureThoughtSignatures(payload map[string]any) {
 
 func hasGoogleSignature(toolCall map[string]any) bool {
 	extra, ok := toolCall["extra_content"].(map[string]any)
-	if !ok { return false }
+	if !ok {
+		return false
+	}
 	google, ok := extra["google"].(map[string]any)
-	if !ok { return false }
+	if !ok {
+		return false
+	}
 	_, exists := google["thought_signature"]
 	return exists
 }
@@ -168,7 +207,9 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 
 func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *model.Result) {
 	data := <-ch
-	if data == nil { return }
+	if data == nil {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data.Raw)
 }
