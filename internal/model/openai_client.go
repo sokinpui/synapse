@@ -71,12 +71,15 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (*Result, erro
 		resp, err := m.client.Do(httpReq)
 		if err != nil {
 			lastErr = err
+			log.Printf("!! %s: %s [key #%d] network error: %v", color.YellowString("Attempt failed"), req.TaskID, keyIdx, err)
 			continue
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("status code: %d, body: %s", resp.StatusCode, string(body))
+			log.Printf("!! %s: %s [key #%d] provider error: %v", color.YellowString("Attempt failed"), req.TaskID, keyIdx, lastErr)
 			continue
 		}
 
@@ -129,12 +132,15 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 			resp, err := m.client.Do(httpReq)
 			if err != nil {
 				lastErr = err
+				log.Printf("!! %s: %s [key #%d] network error: %v", color.YellowString("Attempt failed"), req.TaskID, keyIdx, err)
 				continue
 			}
 
 			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
-				lastErr = fmt.Errorf("status code: %d", resp.StatusCode)
+				lastErr = fmt.Errorf("status code: %d, body: %s", resp.StatusCode, string(body))
+				log.Printf("!! %s: %s [key #%d] provider error: %v", color.YellowString("Attempt failed"), req.TaskID, keyIdx, lastErr)
 				continue
 			}
 
