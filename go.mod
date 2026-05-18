@@ -1,4 +1,4 @@
-module github.com/sokinpui/synapse.go
+module github.com/sokinpui/synapse
 
 go 1.24.1
 

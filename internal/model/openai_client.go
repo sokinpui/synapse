@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sokinpui/synapse.go/internal/color"
+	"github.com/sokinpui/synapse/internal/color"
 )
 
 type ModelListJSON struct {

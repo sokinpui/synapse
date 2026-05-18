@@ -3,8 +3,8 @@ package broker
 import (
 	"sync"
 
-	"github.com/sokinpui/synapse.go/internal/model"
-	"github.com/sokinpui/synapse.go/internal/task"
+	"github.com/sokinpui/synapse/internal/model"
+	"github.com/sokinpui/synapse/internal/task"
 )
 
 type MemoryBroker struct {

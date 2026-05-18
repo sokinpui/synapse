@@ -8,10 +8,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/sokinpui/synapse.go/internal/broker"
-	"github.com/sokinpui/synapse.go/internal/color"
-	"github.com/sokinpui/synapse.go/internal/model"
-	"github.com/sokinpui/synapse.go/internal/task"
+	"github.com/sokinpui/synapse/internal/broker"
+	"github.com/sokinpui/synapse/internal/color"
+	"github.com/sokinpui/synapse/internal/model"
+	"github.com/sokinpui/synapse/internal/task"
 )
 
 // GenAIWorker dequeues and processes generation tasks.

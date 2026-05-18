@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sokinpui/synapse.go/internal/broker"
-	"github.com/sokinpui/synapse.go/internal/config"
-	"github.com/sokinpui/synapse.go/internal/model"
-	"github.com/sokinpui/synapse.go/internal/server"
-	"github.com/sokinpui/synapse.go/internal/worker"
+	"github.com/sokinpui/synapse/internal/broker"
+	"github.com/sokinpui/synapse/internal/config"
+	"github.com/sokinpui/synapse/internal/model"
+	"github.com/sokinpui/synapse/internal/server"
+	"github.com/sokinpui/synapse/internal/worker"
 )
 
 func main() {

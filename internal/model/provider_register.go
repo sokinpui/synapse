@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sokinpui/synapse.go/internal/config"
+	"github.com/sokinpui/synapse/internal/config"
 )
 
 type LLM interface {
