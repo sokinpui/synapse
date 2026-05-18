@@ -10,37 +10,55 @@ The system consists of two main components: a `server` (supporting REST/JSON and
 Client ---HTTP---> Server <---Go Channels---> Worker
 ```
 
+## How it Works
+
+You can configure multiple API keys for the same provider, and Synapse will use simple round-robin balancing to distribute requests across those keys. This allows you to scale your throughput linearly with the number of API keys you have, without mannually managing which key to use for each request.
+
 ## Prerequisites
 
-- Go (1.24+)
+- Go (1.24.1+)
 
 ## Getting Started
 
 ### 1. Configuration
 
-The application is configured using a `config.yaml` file. API keys for the LLM providers are configured using environment variables.
+The application is configured using a `config.yaml` file. API keys for the LLM providers are configured using environment variables specified in the config.
 
 Create a `config.yaml` file in the root directory with the following content:
 
 ```yaml
 server:
-  http_port: 8080
+  http_port: 9001
 
 worker:
   concurrency_multiplier: 4
 
 models:
+  # Example for Gemini Models
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+    env: GENAI_API_KEYS
     codes:
-      - "gemini-3-flash-preview"
-      - "gemini-3.1-flash-lite-preview"
+      - "gemini-2.5-flash"
+      - "gemini-2.0-flash"
+      - "gemini-3.1-pro-preview"
 
+  # Example for OpenRouter Models
   openrouter:
     base_url: "https://openrouter.ai/api/v1"
+    env: OPENROUTER_API_KEY
     codes:
       - "z-ai/glm-4.5-air:free"
       - "qwen/qwen3-coder:free"
+
+  # How to add a new provider:
+  ProviderC:
+    # Openai api compatible provider that support /chat/completions
+    base_url: "https://api.provider-c.com/v1"
+    env: PROVIDER_C_API_KEY
+    codes:
+      - "model-a"
+      - "model-b"
 ```
 
 # API key for the underlying LLM provider
@@ -75,13 +93,13 @@ You can use any OpenAI-compatible client by pointing it to the Synapse server.
 **List Models:**
 
 ```
-curl http://localhost:8080/v1/models
+curl http://localhost:9001/v1/models
 ```
 
 **Chat Completions:**
 
 ```
-curl http://localhost:8080/v1/chat/completions \
+curl http://localhost:9001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gemini-2.5-flash",
