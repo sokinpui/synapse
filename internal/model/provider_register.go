@@ -32,7 +32,7 @@ func New(cfg *config.Config) (*Registry, error) {
 			if _, exists := allModels[code]; exists {
 				log.Printf("Warning: Model '%s' from provider '%s' is overwriting an existing model.", code, name)
 			}
-			allModels[code] = NewOpenAIModel(code, pCfg.BaseURL, balancer)
+			allModels[code] = NewOpenAIModel(code, pCfg.BaseURL, balancer, cfg.Worker.MaxRetry)
 		}
 		log.Printf("Initialized provider '%s' with %d models and %d API keys", name, len(pCfg.Codes), len(apiKeys))
 	}

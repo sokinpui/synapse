@@ -4,6 +4,8 @@ server:
 worker:
   # Multiple of CPU cores to use for processing requests
   concurrency_multiplier: 4
+  # Maximum number of API retries for each request (Total attempts = 1 + max_retry)
+  max_retry: 2
 
 models:
   gemini:

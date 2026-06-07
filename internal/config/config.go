@@ -13,6 +13,7 @@ type Config struct {
 	} `yaml:"server"`
 	Worker struct {
 		ConcurrencyMultiplier int `yaml:"concurrency_multiplier"`
+		MaxRetry              int `yaml:"max_retry"`
 	} `yaml:"worker"`
 	Models map[string]ProviderConfig `yaml:"models"`
 }

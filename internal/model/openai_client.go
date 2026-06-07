@@ -31,14 +31,16 @@ type OpenAIModel struct {
 	modelCode string
 	baseURL   string
 	balancer  *KeyBalancer
+	maxRetry  int
 	client    *http.Client
 }
 
-func NewOpenAIModel(modelCode, baseURL string, balancer *KeyBalancer) *OpenAIModel {
+func NewOpenAIModel(modelCode, baseURL string, balancer *KeyBalancer, maxRetry int) *OpenAIModel {
 	return &OpenAIModel{
 		modelCode: modelCode,
 		baseURL:   baseURL,
 		balancer:  balancer,
+		maxRetry:  maxRetry,
 		client:    &http.Client{},
 	}
 }
@@ -50,8 +52,10 @@ func (m *OpenAIModel) Generate(ctx context.Context, req *Request) (*Result, erro
 
 	targetURL := m.buildURL(req.Endpoint)
 
+	maxAttempts := m.maxRetry + 1
 	var lastErr error
-	for i := 0; i < m.balancer.KeyCount(); i++ {
+
+	for i := 0; i < maxAttempts && i < m.balancer.KeyCount(); i++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -109,8 +113,10 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, req *Request) (<-chan 
 
 		targetURL := m.buildURL(req.Endpoint)
 
+		maxAttempts := m.maxRetry + 1
 		var lastErr error
-		for i := 0; i < m.balancer.KeyCount(); i++ {
+
+		for i := 0; i < maxAttempts && i < m.balancer.KeyCount(); i++ {
 			if ctx.Err() != nil {
 				errCh <- ctx.Err()
 				return
