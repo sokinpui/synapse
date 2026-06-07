@@ -10,6 +10,7 @@ models:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
     env: GENAI_API_KEYS
     codes:
+      - "gemini-3.5-flash"
       - "gemini-3.1-pro-preview"
       - "gemini-pro-latest"
       - "gemini-3-pro-preview"
