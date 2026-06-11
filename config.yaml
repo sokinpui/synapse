@@ -5,7 +5,7 @@ worker:
   # Multiple of CPU cores to use for processing requests
   concurrency_multiplier: 4
   # Maximum number of API retries for each request (Total attempts = 1 + max_retry)
-  max_retry: 5
+  max_retry: 29
 
 models:
   gemini:
@@ -13,13 +13,10 @@ models:
     env: GENAI_API_KEYS
     codes:
       - "gemini-3.5-flash"
-      - "gemini-3.1-pro-preview"
-      - "gemini-pro-latest"
-      - "gemini-3-pro-preview"
+      # - "gemini-3.1-pro-preview"
+      # - "gemini-3-pro-preview"
       - "gemini-3-flash-preview"
-      - "gemini-flash-latest"
       - "gemini-3.1-flash-lite-preview"
-      - "gemini-flash-lite-latest"
       - "gemini-2.5-flash"
       - "gemini-2.5-flash-lite"
       - "gemini-2.0-flash"
@@ -28,11 +25,11 @@ models:
       - "gemma-4-26b-a4b-it"
 
       # Image
-      - "gemini-3-pro-image-preview"
-      - "gemini-2.5-flash-image"
-      - "imagen-4.0-ultra-generate-001"
-      - "imagen-4.0-generate-001"
-      - "imagen-4.0-fast-generate-001"
+      # - "gemini-3-pro-image-preview"
+      # - "gemini-2.5-flash-image"
+      # - "imagen-4.0-ultra-generate-001"
+      # - "imagen-4.0-generate-001"
+      # - "imagen-4.0-fast-generate-001"
 
   # openrouter:
   #   base_url: "https://openrouter.ai/api/v1"
