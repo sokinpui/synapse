@@ -29,10 +29,11 @@ func New(cfg *config.Config) (*Registry, error) {
 		balancer := NewKeyBalancer(apiKeys)
 
 		for _, code := range pCfg.Codes {
-			if _, exists := allModels[code]; exists {
-				log.Printf("Warning: Model '%s' from provider '%s' is overwriting an existing model.", code, name)
+			fullKey := fmt.Sprintf("%s/%s", name, code)
+			if _, exists := allModels[fullKey]; exists {
+				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, name)
 			}
-			allModels[code] = NewOpenAIModel(code, pCfg.BaseURL, balancer, cfg.Worker.MaxRetry)
+			allModels[fullKey] = NewOpenAIModel(fullKey, pCfg.BaseURL, balancer, cfg.Worker.MaxRetry)
 		}
 		log.Printf("Initialized provider '%s' with %d models and %d API keys", name, len(pCfg.Codes), len(apiKeys))
 	}

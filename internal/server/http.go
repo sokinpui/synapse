@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"strings"
 	"net/http"
 	"time"
 
@@ -66,12 +67,17 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 
 	modelCode, _ := payload["model"].(string)
 	stream, _ := payload["stream"].(bool)
+
+	parts := strings.SplitN(modelCode, "/", 2)
+	if len(parts) == 2 {
+		payload["model"] = parts[1]
+	}
+
 	s.ensureThoughtSignatures(payload)
 	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
 	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
-
 	t := &task.GenerationTask{
 		TaskID:    taskID,
 		ModelCode: modelCode,
@@ -105,16 +111,21 @@ func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http
 	}
 
 	modelCode, _ := payload["model"].(string)
+	parts := strings.SplitN(modelCode, "/", 2)
+	if len(parts) == 2 {
+		payload["model"] = parts[1]
+	}
+	modifiedBody, _ := json.Marshal(payload)
+
 	taskID := uuid.New().String()
 	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
-
 	// Image generation typically isn't streamed in standard OpenAI API
 	t := &task.GenerationTask{
 		TaskID:    taskID,
 		ModelCode: modelCode,
 		Endpoint:  "/images/generations",
 		Stream:    false,
-		Payload:   body,
+		Payload:   modifiedBody,
 	}
 
 	resCh := s.broker.Subscribe(taskID)

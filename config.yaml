@@ -45,3 +45,42 @@ models:
   #     - "microsoft/mai-ds-r1:free"
   #     - "deepseek/deepseek-chat-v3-0324:free"
   #     - "deepseek/deepseek-r1:free"
+
+  nim:
+    base_url: "https://integrate.api.nvidia.com/v1"
+    env: NIM_API_KEYS
+    codes:
+      - "deepseek-ai/deepseek-v4-flash"
+
+  aisrp:
+    base_url: "http://localhost:9003/v1"
+    env: AISRP_API_KEYS
+    codes:
+      - "gemini-2.5-flash"
+      - "gemini-2.5-pro"
+      - "gemini-2.5-flash-preview-tts"
+      - "gemini-2.5-pro-preview-tts"
+      - "gemini-3.1-flash-tts-preview"
+      - "gemma-4-26b-a4b-it"
+      - "gemma-4-31b-it"
+      - "gemini-flash-latest"
+      - "gemini-flash-lite-latest"
+      - "gemini-pro-latest"
+      - "gemini-2.5-flash-lite"
+      - "gemini-2.5-flash-image"
+      - "gemini-3-flash-preview"
+      - "gemini-3.1-pro-preview"
+      - "gemini-3.1-flash-lite-preview"
+      - "gemini-3.1-flash-lite"
+      - "gemini-3-pro-image"
+      - "gemini-3.1-flash-image"
+      - "gemini-3.5-flash"
+      - "gemini-robotics-er-1.6-preview"
+      - "gemini-2.5-computer-use-preview-10-2025"
+      - "gemini-embedding-001"
+      - "gemini-embedding-2-preview"
+      - "gemini-embedding-2"
+      - "imagen-4.0-generate-001"
+      - "imagen-4.0-ultra-generate-001"
+      - "imagen-4.0-fast-generate-001"
+

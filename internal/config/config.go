@@ -46,8 +46,10 @@ func Load(path string) *Config {
 
 func (c *Config) GetOrderedModelCodes() []string {
 	var codes []string
-	for _, provider := range c.Models {
-		codes = append(codes, provider.Codes...)
+	for name, provider := range c.Models {
+		for _, code := range provider.Codes {
+			codes = append(codes, name+"/"+code)
+		}
 	}
 	return codes
 }
