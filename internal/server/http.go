@@ -188,13 +188,48 @@ func injectDummySignature(toolCall map[string]any) {
 }
 
 func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan *model.Result) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	var firstResult *model.Result
+	select {
+	case <-r.Context().Done():
+		return
+	case res, ok := <-ch:
+		if !ok || res == nil {
+			return
+		}
+		firstResult = res
+	}
+
+	if firstResult.IsError {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write(firstResult.Raw)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+	writeChunk := func(data *model.Result) bool {
+		if data.IsDone {
+			io.WriteString(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return false
+		}
+		io.WriteString(w, "data: ")
+		w.Write(data.Raw)
+		io.WriteString(w, "\n\n")
+		flusher.Flush()
+		return true
+	}
+
+	if !writeChunk(firstResult) {
 		return
 	}
 
@@ -203,15 +238,21 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 		case <-r.Context().Done():
 			return
 		case data, ok := <-ch:
-			if !ok || data == nil || data.IsDone {
+			if !ok || data == nil {
 				io.WriteString(w, "data: [DONE]\n\n")
 				flusher.Flush()
 				return
 			}
-			io.WriteString(w, "data: ")
-			w.Write(data.Raw)
-			io.WriteString(w, "\n\n")
-			flusher.Flush()
+			if data.IsError {
+				io.WriteString(w, "data: ")
+				w.Write(data.Raw)
+				io.WriteString(w, "\n\n")
+				flusher.Flush()
+				return
+			}
+			if !writeChunk(data) {
+				return
+			}
 		}
 	}
 }
@@ -219,6 +260,13 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *model.Result) {
 	data := <-ch
 	if data == nil {
+		http.Error(w, "no response from worker", http.StatusBadGateway)
+		return
+	}
+	if data.IsError {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write(data.Raw)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
