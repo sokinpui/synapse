@@ -8,21 +8,21 @@ worker:
   max_retry: 29
 
 models:
-  gemini:
-    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
-    env: GENAI_API_KEYS
-    codes:
-      - "gemini-3.5-flash"
-      # - "gemini-3.1-pro-preview"
-      # - "gemini-3-pro-preview"
-      - "gemini-3-flash-preview"
-      - "gemini-3.1-flash-lite-preview"
-      - "gemini-2.5-flash"
-      - "gemini-2.5-flash-lite"
-      - "gemini-2.0-flash"
-      - "gemini-2.0-flash-lite"
-      - "gemma-4-31b-it"
-      - "gemma-4-26b-a4b-it"
+  # gemini:
+  #   base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+  #   env: GENAI_API_KEYS
+  #   codes:
+  #     - "gemini-3.5-flash"
+  #     # - "gemini-3.1-pro-preview"
+  #     - "gemini-3-pro-preview"
+  #     - "gemini-3-flash-preview"
+  #     - "gemini-3.1-flash-lite-preview"
+  #     - "gemini-2.5-flash"
+  #     - "gemini-2.5-flash-lite"
+  #     - "gemini-2.0-flash"
+  #     - "gemini-2.0-flash-lite"
+  #     - "gemma-4-31b-it"
+  #     - "gemma-4-26b-a4b-it"
 
       # Image
       # - "gemini-3-pro-image-preview"
@@ -46,16 +46,20 @@ models:
   #     - "deepseek/deepseek-chat-v3-0324:free"
   #     - "deepseek/deepseek-r1:free"
 
-  nim:
-    base_url: "https://integrate.api.nvidia.com/v1"
-    env: NIM_API_KEYS
-    codes:
-      - "deepseek-ai/deepseek-v4-flash"
+  # nim:
+  #   base_url: "https://integrate.api.nvidia.com/v1"
+  #   env: NIM_API_KEYS
+  #   codes:
+  #     - "deepseek-ai/deepseek-v4-flash"
 
   aisrp:
     base_url: "http://localhost:9003/v1"
     env: AISRP_API_KEYS
     codes:
+      - "gemini-3.8-flash"
+      - "gemini-3.7-flash"
+      - "gemini-3.6-flash"
+      - "gemini-3.5-flash-lite"
       - "gemini-2.5-flash"
       - "gemini-2.5-pro"
       - "gemini-2.5-flash-preview-tts"
