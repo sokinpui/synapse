@@ -68,7 +68,6 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 		payload["model"] = parts[1]
 	}
 
-	s.ensureThoughtSignatures(payload)
 	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
@@ -128,55 +127,6 @@ func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http
 
 	s.broker.Enqueue(t)
 	s.redirectRawResult(w, resCh)
-}
-
-func (s *HTTPServer) ensureThoughtSignatures(payload map[string]any) {
-	messages, ok := payload["messages"].([]any)
-	if !ok {
-		return
-	}
-
-	for _, m := range messages {
-		msg, ok := m.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		toolCalls, ok := msg["tool_calls"].([]any)
-		if !ok || len(toolCalls) == 0 {
-			continue
-		}
-
-		firstCall, ok := toolCalls[0].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		if !hasGoogleSignature(firstCall) {
-			injectDummySignature(firstCall)
-		}
-	}
-}
-
-func hasGoogleSignature(toolCall map[string]any) bool {
-	extra, ok := toolCall["extra_content"].(map[string]any)
-	if !ok {
-		return false
-	}
-	google, ok := extra["google"].(map[string]any)
-	if !ok {
-		return false
-	}
-	_, exists := google["thought_signature"]
-	return exists
-}
-
-func injectDummySignature(toolCall map[string]any) {
-	toolCall["extra_content"] = map[string]any{
-		"google": map[string]any{
-			"thought_signature": "skip_thought_signature_validator",
-		},
-	}
 }
 
 func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *GenerationTask, ch <-chan *Result) {
