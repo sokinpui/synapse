@@ -1,26 +1,22 @@
-package server
+package main
 
 import (
 	"encoding/json"
 	"io"
 	"log"
-	"strings"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sokinpui/synapse/internal/broker"
-	"github.com/sokinpui/synapse/internal/color"
-	"github.com/sokinpui/synapse/internal/model"
-	"github.com/sokinpui/synapse/internal/task"
 )
 
 type HTTPServer struct {
-	broker      *broker.MemoryBroker
-	llmRegistry *model.Registry
+	broker      *MemoryBroker
+	llmRegistry *Registry
 }
 
-func NewHTTPServer(b *broker.MemoryBroker, llmRegistry *model.Registry) *HTTPServer {
+func NewHTTPServer(b *MemoryBroker, llmRegistry *Registry) *HTTPServer {
 	return &HTTPServer{
 		broker:      b,
 		llmRegistry: llmRegistry,
@@ -28,20 +24,19 @@ func NewHTTPServer(b *broker.MemoryBroker, llmRegistry *model.Registry) *HTTPSer
 }
 
 func (s *HTTPServer) RegisterRoutes(mux *http.ServeMux) {
-	// OpenAI Compatible API
 	mux.HandleFunc("GET /v1/models", s.handleOpenAIListModels)
 	mux.HandleFunc("POST /v1/chat/completions", s.handleOpenAIChatCompletions)
 	mux.HandleFunc("POST /v1/images/generations", s.handleOpenAIImageGenerations)
 }
 
 func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Request) {
-	log.Printf("-> %s %s", color.BlueString(r.Method), r.URL.Path)
+	log.Printf("-> %s %s", blueString(r.Method), r.URL.Path)
 
 	modelCodes := s.llmRegistry.ListModels()
 	now := time.Now().Unix()
-	data := make([]model.ModelJSON, len(modelCodes))
+	data := make([]ModelJSON, len(modelCodes))
 	for i, m := range modelCodes {
-		data[i] = model.ModelJSON{
+		data[i] = ModelJSON{
 			ID:      m,
 			Object:  "model",
 			Created: now,
@@ -49,7 +44,7 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(model.ModelListJSON{Object: "list", Data: data})
+	json.NewEncoder(w).Encode(ModelListJSON{Object: "list", Data: data})
 }
 
 func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -77,8 +72,8 @@ func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.
 	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
-	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
-	t := &task.GenerationTask{
+	log.Printf("-> %s %s %s", blueString(r.Method), r.URL.Path, yellowString(taskID))
+	t := &GenerationTask{
 		TaskID:    taskID,
 		ModelCode: modelCode,
 		Endpoint:  "/chat/completions",
@@ -118,9 +113,9 @@ func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http
 	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
-	log.Printf("-> %s %s %s", color.BlueString(r.Method), r.URL.Path, color.YellowString(taskID))
-	// Image generation typically isn't streamed in standard OpenAI API
-	t := &task.GenerationTask{
+	log.Printf("-> %s %s %s", blueString(r.Method), r.URL.Path, yellowString(taskID))
+
+	t := &GenerationTask{
 		TaskID:    taskID,
 		ModelCode: modelCode,
 		Endpoint:  "/images/generations",
@@ -132,7 +127,6 @@ func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http
 	defer s.broker.Unsubscribe(taskID)
 
 	s.broker.Enqueue(t)
-
 	s.redirectRawResult(w, resCh)
 }
 
@@ -153,8 +147,6 @@ func (s *HTTPServer) ensureThoughtSignatures(payload map[string]any) {
 			continue
 		}
 
-		// Gemini requires a thought_signature on the first tool call of a response turn.
-		// If missing (common in OpenAI clients), we inject a dummy to bypass validation.
 		firstCall, ok := toolCalls[0].(map[string]any)
 		if !ok {
 			continue
@@ -187,14 +179,14 @@ func injectDummySignature(toolCall map[string]any) {
 	}
 }
 
-func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *task.GenerationTask, ch <-chan *model.Result) {
+func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *GenerationTask, ch <-chan *Result) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
 
-	var firstResult *model.Result
+	var firstResult *Result
 	select {
 	case <-r.Context().Done():
 		return
@@ -216,7 +208,7 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	writeChunk := func(data *model.Result) bool {
+	writeChunk := func(data *Result) bool {
 		if data.IsDone {
 			io.WriteString(w, "data: [DONE]\n\n")
 			flusher.Flush()
@@ -257,7 +249,7 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *model.Result) {
+func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *Result) {
 	data := <-ch
 	if data == nil {
 		http.Error(w, "no response from worker", http.StatusBadGateway)

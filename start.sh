@@ -6,7 +6,7 @@ echo "Tidying Go modules..."
 go mod tidy
 
 echo "Building binaries..."
-GOWORK=off go build -o bin/server ./cmd/server
+GOWORK=off go build -o bin/server .
 echo "Build complete. Binaries are in the 'bin' directory."
 
 if [ -f .env ]; then

@@ -1,4 +1,4 @@
-package worker
+package main
 
 import (
 	"context"
@@ -7,22 +7,16 @@ import (
 	"log"
 	"os"
 	"sync"
-
-	"github.com/sokinpui/synapse/internal/broker"
-	"github.com/sokinpui/synapse/internal/color"
-	"github.com/sokinpui/synapse/internal/model"
-	"github.com/sokinpui/synapse/internal/task"
 )
 
-// GenAIWorker dequeues and processes generation tasks.
 type GenAIWorker struct {
 	workerID    string
-	broker      *broker.MemoryBroker
-	llmRegistry *model.Registry
+	broker      *MemoryBroker
+	llmRegistry *Registry
 	concurrency int
 }
 
-func New(b *broker.MemoryBroker, llmRegistry *model.Registry, concurrency int) *GenAIWorker {
+func NewWorker(b *MemoryBroker, llmRegistry *Registry, concurrency int) *GenAIWorker {
 	return &GenAIWorker{
 		workerID:    fmt.Sprintf("GenAIWorker-%d", os.Getpid()),
 		broker:      b,
@@ -32,7 +26,7 @@ func New(b *broker.MemoryBroker, llmRegistry *model.Registry, concurrency int) *
 }
 
 func (w *GenAIWorker) Run(ctx context.Context) {
-	log.Printf("%s started. Waiting for tasks... (concurrency: %d)", color.YellowString(w.workerID), w.concurrency)
+	log.Printf("%s started. Waiting for tasks... (concurrency: %d)", yellowString(w.workerID), w.concurrency)
 
 	taskCh := w.broker.Dequeue()
 	var wg sync.WaitGroup
@@ -58,8 +52,8 @@ func (w *GenAIWorker) Run(ctx context.Context) {
 	log.Printf("%s all workers stopped.", w.workerID)
 }
 
-func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask) {
-	defer log.Printf("<- %s: %s [%s]", color.BlueString("Finished Request"), color.YellowString(task.TaskID), task.ModelCode)
+func (w *GenAIWorker) processTask(ctx context.Context, task *GenerationTask) {
+	defer log.Printf("<- %s: %s [%s]", blueString("Finished Request"), yellowString(task.TaskID), task.ModelCode)
 
 	taskCtx, cancelTask := context.WithCancel(ctx)
 	defer cancelTask()
@@ -67,7 +61,6 @@ func (w *GenAIWorker) processTask(ctx context.Context, task *task.GenerationTask
 	go w.listenForCancellation(taskCtx, task.TaskID, cancelTask)
 
 	resultChannel := task.TaskID
-
 	defer func() {
 		w.broker.Publish(resultChannel, nil)
 	}()
@@ -111,16 +104,11 @@ func (w *GenAIWorker) publishError(taskID string, err error) {
 			"type":    "synapse_error",
 		},
 	})
-	w.broker.Publish(taskID, &model.Result{Raw: errJSON, IsError: true})
+	w.broker.Publish(taskID, &Result{Raw: errJSON, IsError: true})
 }
 
-func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
-	req := &model.Request{
-		TaskID:  task.TaskID,
-		Endpoint: task.Endpoint,
-		Payload: task.Payload,
-	}
-	result, err := llm.Generate(ctx, req)
+func (w *GenAIWorker) process(ctx context.Context, task *GenerationTask, llm LLM) error {
+	result, err := llm.Generate(ctx, task)
 	if err != nil {
 		return err
 	}
@@ -128,19 +116,14 @@ func (w *GenAIWorker) process(ctx context.Context, task *task.GenerationTask, ll
 	return nil
 }
 
-func (w *GenAIWorker) processStream(ctx context.Context, task *task.GenerationTask, llm model.LLM) error {
-	req := &model.Request{
-		TaskID:  task.TaskID,
-		Endpoint: task.Endpoint,
-		Payload: task.Payload,
-	}
-	outCh, errCh := llm.GenerateStream(ctx, req)
+func (w *GenAIWorker) processStream(ctx context.Context, task *GenerationTask, llm LLM) error {
+	outCh, errCh := llm.GenerateStream(ctx, task)
 
 	for {
 		select {
 		case chunk, ok := <-outCh:
 			if !ok {
-				return nil // Stream finished
+				return nil
 			}
 			w.broker.Publish(task.TaskID, chunk)
 		case err := <-errCh:

@@ -10,7 +10,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /bin/synapse-server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /bin/synapse-server .
 
 # Runtime Stage
 FROM debian:bookworm-slim

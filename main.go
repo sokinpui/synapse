@@ -9,37 +9,30 @@ import (
 	"runtime"
 	"syscall"
 	"time"
-
-	"github.com/sokinpui/synapse/internal/broker"
-	"github.com/sokinpui/synapse/internal/config"
-	"github.com/sokinpui/synapse/internal/model"
-	"github.com/sokinpui/synapse/internal/server"
-	"github.com/sokinpui/synapse/internal/worker"
 )
 
 func main() {
 	log.SetPrefix("server: ")
 
-	cfg := config.Load()
+	cfg := LoadConfig()
 
-	llmRegistry, err := model.New(cfg)
+	llmRegistry, err := NewRegistry(cfg)
 	if err != nil {
 		log.Printf("Warning: Failed to initialize LLM registry: %v", err)
 	}
 
-	memBroker := broker.NewMemoryBroker(1000)
+	memBroker := NewMemoryBroker(1000)
 
 	concurrency := cfg.Worker.ConcurrencyMultiplier * runtime.NumCPU()
-	w := worker.New(memBroker, llmRegistry, concurrency)
+	w := NewWorker(memBroker, llmRegistry, concurrency)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go w.Run(ctx)
 
-	// HTTP Server
 	mux := http.NewServeMux()
-	httpSrv := server.NewHTTPServer(memBroker, llmRegistry)
+	httpSrv := NewHTTPServer(memBroker, llmRegistry)
 	httpSrv.RegisterRoutes(mux)
 	httpAddr := fmt.Sprintf(":%d", cfg.Server.HTTPPort)
 	hSrv := &http.Server{Addr: httpAddr, Handler: mux}

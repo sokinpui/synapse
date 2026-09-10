@@ -1,40 +1,35 @@
-package broker
+package main
 
-import (
-	"sync"
-
-	"github.com/sokinpui/synapse/internal/model"
-	"github.com/sokinpui/synapse/internal/task"
-)
+import "sync"
 
 type MemoryBroker struct {
-	tasks         chan *task.GenerationTask
-	subscribers   map[string]chan *model.Result
+	tasks         chan *GenerationTask
+	subscribers   map[string]chan *Result
 	cancellations map[string]chan struct{}
 	mu            sync.RWMutex
 }
 
 func NewMemoryBroker(bufferSize int) *MemoryBroker {
 	return &MemoryBroker{
-		tasks:         make(chan *task.GenerationTask, bufferSize),
-		subscribers:   make(map[string]chan *model.Result),
+		tasks:         make(chan *GenerationTask, bufferSize),
+		subscribers:   make(map[string]chan *Result),
 		cancellations: make(map[string]chan struct{}),
 	}
 }
 
-func (b *MemoryBroker) Enqueue(task *task.GenerationTask) {
+func (b *MemoryBroker) Enqueue(task *GenerationTask) {
 	b.tasks <- task
 }
 
-func (b *MemoryBroker) Dequeue() <-chan *task.GenerationTask {
+func (b *MemoryBroker) Dequeue() <-chan *GenerationTask {
 	return b.tasks
 }
 
-func (b *MemoryBroker) Subscribe(id string) chan *model.Result {
+func (b *MemoryBroker) Subscribe(id string) chan *Result {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	ch := make(chan *model.Result, 100)
+	ch := make(chan *Result, 100)
 	b.subscribers[id] = ch
 	return ch
 }
@@ -54,7 +49,7 @@ func (b *MemoryBroker) Unsubscribe(id string) {
 	}
 }
 
-func (b *MemoryBroker) Publish(id string, msg *model.Result) {
+func (b *MemoryBroker) Publish(id string, msg *Result) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 

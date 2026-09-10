@@ -1,9 +1,7 @@
-package model
+package main
 
 import "sync"
 
-// api key table
-// index | key | used
 type apiKeyState struct {
 	Value string
 	Used  bool

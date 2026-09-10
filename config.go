@@ -1,4 +1,4 @@
-package config
+package main
 
 import (
 	"os"
@@ -27,7 +27,7 @@ type Config struct {
 	Providers []ProviderConfig
 }
 
-func Load() *Config {
+func LoadConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			HTTPPort: 9001,
