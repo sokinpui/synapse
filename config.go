@@ -17,6 +17,7 @@ type WorkerConfig struct {
 type ProviderConfig struct {
 	Name    string
 	BaseURL string
+	Adapter ProviderAdapter
 	APIKeys []string
 	Codes   []string
 }
@@ -40,6 +41,7 @@ func LoadConfig() *Config {
 			{
 				Name:    "aisrp",
 				BaseURL: "http://localhost:9003/v1",
+				Adapter: TransparentAdapter(),
 				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
 				Codes: []string{
 					"gemini-flash-latest",

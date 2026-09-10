@@ -1,15 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
 )
 
 type LLM interface {
@@ -18,30 +14,40 @@ type LLM interface {
 	CountTokens(prompt string) (int, error)
 }
 
-type OpenAIModel struct {
+type ProviderModel struct {
+	provider  string
 	modelCode string
 	baseURL   string
+	adapter   ProviderAdapter
 	balancer  *KeyBalancer
 	maxRetry  int
 	client    *http.Client
 }
 
-func NewOpenAIModel(modelCode, baseURL string, balancer *KeyBalancer, maxRetry int) *OpenAIModel {
-	return &OpenAIModel{
+func NewProviderModel(provider, modelCode, baseURL string, adapter ProviderAdapter, balancer *KeyBalancer, maxRetry int) *ProviderModel {
+	return &ProviderModel{
+		provider:  provider,
 		modelCode: modelCode,
 		baseURL:   baseURL,
+		adapter:   adapter,
 		balancer:  balancer,
 		maxRetry:  maxRetry,
 		client:    &http.Client{},
 	}
 }
 
-func (m *OpenAIModel) Generate(ctx context.Context, task *GenerationTask) (*Result, error) {
+func (m *ProviderModel) Generate(ctx context.Context, task *GenerationTask) (*Result, error) {
 	if m.balancer.KeyCount() == 0 {
 		return nil, fmt.Errorf("%w: API key is required", ErrConfiguration)
 	}
 
-	targetURL := m.buildURL(task.Endpoint)
+	reqCtx := &RequestContext{
+		BaseURL:   m.baseURL,
+		Endpoint:  task.Endpoint,
+		ModelCode: m.modelCode,
+		Stream:    false,
+		Payload:   task.Payload,
+	}
 	maxAttempts := m.maxRetry + 1
 	var lastErr error
 
@@ -51,33 +57,34 @@ func (m *OpenAIModel) Generate(ctx context.Context, task *GenerationTask) (*Resu
 		}
 
 		apiKey, keyIdx := m.balancer.PickKey()
+		reqCtx.APIKey = apiKey
+
 		log.Printf("-> %s: %s [%s] -> %s, try API key #%d",
 			blueString("Processing request"),
 			yellowString(task.TaskID),
-			m.modelCode, task.Endpoint, keyIdx)
+			m.provider+"/"+m.modelCode, task.Endpoint, keyIdx)
 
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(task.Payload))
+		httpReq, err := m.adapter.BuildRequest(ctx, reqCtx)
 		if err != nil {
 			return nil, err
 		}
 
-		m.setHeaders(httpReq, apiKey)
 		resp, err := m.client.Do(httpReq)
 		if err != nil {
 			lastErr = err
 			log.Printf("!! %s: %s [key #%d] network error: %v", yellowString("Attempt failed"), task.TaskID, keyIdx, err)
 			continue
 		}
-		defer resp.Body.Close()
-
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			lastErr = fmt.Errorf("status code: %d, body: %s", resp.StatusCode, string(body))
 			log.Printf("!! %s: %s [key #%d] provider error: %v", yellowString("Attempt failed"), task.TaskID, keyIdx, lastErr)
 			continue
 		}
 
-		raw, err := io.ReadAll(resp.Body)
+		raw, err := m.adapter.TransformResponse(resp)
+		resp.Body.Close()
 		if err != nil {
 			lastErr = err
 			continue
@@ -88,7 +95,7 @@ func (m *OpenAIModel) Generate(ctx context.Context, task *GenerationTask) (*Resu
 	return nil, fmt.Errorf("all API keys failed: %w", lastErr)
 }
 
-func (m *OpenAIModel) GenerateStream(ctx context.Context, task *GenerationTask) (<-chan *Result, <-chan error) {
+func (m *ProviderModel) GenerateStream(ctx context.Context, task *GenerationTask) (<-chan *Result, <-chan error) {
 	outCh := make(chan *Result)
 	errCh := make(chan error, 1)
 
@@ -101,7 +108,13 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, task *GenerationTask) 
 			return
 		}
 
-		targetURL := m.buildURL(task.Endpoint)
+		reqCtx := &RequestContext{
+			BaseURL:   m.baseURL,
+			Endpoint:  task.Endpoint,
+			ModelCode: m.modelCode,
+			Stream:    true,
+			Payload:   task.Payload,
+		}
 		maxAttempts := m.maxRetry + 1
 		var lastErr error
 
@@ -112,18 +125,19 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, task *GenerationTask) 
 			}
 
 			apiKey, keyIdx := m.balancer.PickKey()
+			reqCtx.APIKey = apiKey
+
 			log.Printf("-> %s: %s [%s] -> %s, try API key #%d",
 				blueString("Processing request"),
 				yellowString(task.TaskID),
-				m.modelCode, task.Endpoint, keyIdx)
+				m.provider+"/"+m.modelCode, task.Endpoint, keyIdx)
 
-			httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(task.Payload))
+			httpReq, err := m.adapter.BuildRequest(ctx, reqCtx)
 			if err != nil {
 				errCh <- err
 				return
 			}
 
-			m.setHeaders(httpReq, apiKey)
 			resp, err := m.client.Do(httpReq)
 			if err != nil {
 				lastErr = err
@@ -139,20 +153,9 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, task *GenerationTask) 
 				continue
 			}
 
-			scanner := bufio.NewScanner(resp.Body)
-			for scanner.Scan() {
-				line := scanner.Text()
-				if line == "" {
-					continue
-				}
-				if line == "data: [DONE]" {
-					outCh <- &Result{IsDone: true}
-					break
-				}
-				if after, ok := strings.CutPrefix(line, "data: "); ok {
-					data := after
-					outCh <- &Result{Raw: json.RawMessage(data)}
-				}
+			err = m.adapter.TransformStream(ctx, resp, outCh)
+			if err != nil {
+				errCh <- err
 			}
 			resp.Body.Close()
 			return
@@ -163,17 +166,8 @@ func (m *OpenAIModel) GenerateStream(ctx context.Context, task *GenerationTask) 
 	return outCh, errCh
 }
 
-func (m *OpenAIModel) CountTokens(prompt string) (int, error) {
+func (m *ProviderModel) CountTokens(prompt string) (int, error) {
 	return len(prompt) / 4, nil
-}
-
-func (m *OpenAIModel) setHeaders(req *http.Request, apiKey string) {
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-}
-
-func (m *OpenAIModel) buildURL(endpoint string) string {
-	return strings.TrimSuffix(m.baseURL, "/") + "/" + strings.TrimPrefix(endpoint, "/")
 }
 
 type Registry struct {
@@ -185,6 +179,11 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 	allModels := make(map[string]LLM)
 
 	for _, pCfg := range cfg.Providers {
+		adapter := pCfg.Adapter
+		if adapter == nil {
+			adapter = TransparentAdapter()
+		}
+
 		balancer := NewKeyBalancer(pCfg.APIKeys)
 
 		for _, code := range pCfg.Codes {
@@ -192,9 +191,9 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 			if _, exists := allModels[fullKey]; exists {
 				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, pCfg.Name)
 			}
-			allModels[fullKey] = NewOpenAIModel(fullKey, pCfg.BaseURL, balancer, cfg.Worker.MaxRetry)
+			allModels[fullKey] = NewProviderModel(pCfg.Name, code, pCfg.BaseURL, adapter, balancer, cfg.Worker.MaxRetry)
 		}
-		log.Printf("Initialized provider '%s' with %d models and %d API keys", pCfg.Name, len(pCfg.Codes), len(pCfg.APIKeys))
+		log.Printf("Initialized provider '%s' (adapter: %s) with %d models and %d API keys", pCfg.Name, adapter.Name(), len(pCfg.Codes), len(pCfg.APIKeys))
 	}
 
 	ordered := cfg.GetOrderedModelCodes()

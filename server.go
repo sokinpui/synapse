@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,8 +24,9 @@ func NewHTTPServer(b *MemoryBroker, llmRegistry *Registry) *HTTPServer {
 
 func (s *HTTPServer) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/models", s.handleOpenAIListModels)
-	mux.HandleFunc("POST /v1/chat/completions", s.handleOpenAIChatCompletions)
-	mux.HandleFunc("POST /v1/images/generations", s.handleOpenAIImageGenerations)
+	mux.HandleFunc("POST /v1/chat/completions", s.handleTask)
+	mux.HandleFunc("POST /v1/images/generations", s.handleTask)
+	mux.HandleFunc("POST /v1/responses", s.handleTask)
 }
 
 func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Request) {
@@ -47,86 +47,49 @@ func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(ModelListJSON{Object: "list", Data: data})
 }
 
-func (s *HTTPServer) handleOpenAIChatCompletions(w http.ResponseWriter, r *http.Request) {
+type routingHeader struct {
+	Model  string `json:"model"`
+	Stream bool   `json:"stream"`
+}
+
+func (s *HTTPServer) handleTask(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusInternalServerError)
 		return
 	}
 
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
+	var header routingHeader
+	if err := json.Unmarshal(body, &header); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
-	modelCode, _ := payload["model"].(string)
-	stream, _ := payload["stream"].(bool)
-
-	parts := strings.SplitN(modelCode, "/", 2)
-	if len(parts) == 2 {
-		payload["model"] = parts[1]
+	if header.Model == "" {
+		http.Error(w, "missing model in request", http.StatusBadRequest)
+		return
 	}
-
-	modifiedBody, _ := json.Marshal(payload)
 
 	taskID := uuid.New().String()
 	log.Printf("-> %s %s %s", blueString(r.Method), r.URL.Path, yellowString(taskID))
+
 	t := &GenerationTask{
 		TaskID:    taskID,
-		ModelCode: modelCode,
-		Endpoint:  "/chat/completions",
-		Stream:    stream,
-		Payload:   modifiedBody,
+		ModelCode: header.Model,
+		Endpoint:  r.URL.Path,
+		Stream:    header.Stream,
+		Payload:   body,
 	}
 
 	resCh := s.broker.Subscribe(taskID)
 	defer s.broker.Unsubscribe(taskID)
-	s.broker.Enqueue(t)
 
+	s.broker.Enqueue(t)
 	if t.Stream {
 		s.streamOpenAIResults(w, r, t, resCh)
 		return
 	}
-	s.redirectRawResult(w, resCh)
-}
-
-func (s *HTTPServer) handleOpenAIImageGenerations(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusInternalServerError)
-		return
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
-		return
-	}
-
-	modelCode, _ := payload["model"].(string)
-	parts := strings.SplitN(modelCode, "/", 2)
-	if len(parts) == 2 {
-		payload["model"] = parts[1]
-	}
-	modifiedBody, _ := json.Marshal(payload)
-
-	taskID := uuid.New().String()
-	log.Printf("-> %s %s %s", blueString(r.Method), r.URL.Path, yellowString(taskID))
-
-	t := &GenerationTask{
-		TaskID:    taskID,
-		ModelCode: modelCode,
-		Endpoint:  "/images/generations",
-		Stream:    false,
-		Payload:   modifiedBody,
-	}
-
-	resCh := s.broker.Subscribe(taskID)
-	defer s.broker.Unsubscribe(taskID)
-
-	s.broker.Enqueue(t)
-	s.redirectRawResult(w, resCh)
+	s.redirectRawResult(w, r, taskID, resCh)
 }
 
 func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request, t *GenerationTask, ch <-chan *Result) {
@@ -139,6 +102,7 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	var firstResult *Result
 	select {
 	case <-r.Context().Done():
+		s.broker.SignalCancel(t.TaskID)
 		return
 	case res, ok := <-ch:
 		if !ok || res == nil {
@@ -178,6 +142,7 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	for {
 		select {
 		case <-r.Context().Done():
+			s.broker.SignalCancel(t.TaskID)
 			return
 		case data, ok := <-ch:
 			if !ok || data == nil {
@@ -199,8 +164,14 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, ch <-chan *Result) {
-	data := <-ch
+func (s *HTTPServer) redirectRawResult(w http.ResponseWriter, r *http.Request, taskID string, ch <-chan *Result) {
+	var data *Result
+	select {
+	case <-r.Context().Done():
+		s.broker.SignalCancel(taskID)
+		return
+	case data = <-ch:
+	}
 	if data == nil {
 		http.Error(w, "no response from worker", http.StatusBadGateway)
 		return
