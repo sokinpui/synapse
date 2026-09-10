@@ -20,9 +20,8 @@ type GenerationTask struct {
 }
 
 type Result struct {
-	Raw     json.RawMessage
+	Raw     []byte
 	IsError bool
-	IsDone  bool
 }
 
 type ModelListJSON struct {

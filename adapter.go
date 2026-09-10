@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -71,29 +70,25 @@ func (a *transparentAdapter) TransformResponse(resp *http.Response) ([]byte, err
 }
 
 func (a *transparentAdapter) TransformStream(ctx context.Context, resp *http.Response, out chan<- *Result) error {
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
+	buf := make([]byte, 4096)
+	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, ":") {
-			continue
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			out <- &Result{Raw: chunk}
 		}
-
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "data: [DONE]" {
-			out <- &Result{IsDone: true}
-			return nil
-		}
-
-		if after, ok := strings.CutPrefix(line, "data: "); ok {
-			out <- &Result{Raw: json.RawMessage(after)}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
 		}
 	}
-
-	return scanner.Err()
 }
 
 func buildTargetURL(baseURL, endpoint string) string {

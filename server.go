@@ -122,22 +122,8 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	writeChunk := func(data *Result) bool {
-		if data.IsDone {
-			io.WriteString(w, "data: [DONE]\n\n")
-			flusher.Flush()
-			return false
-		}
-		io.WriteString(w, "data: ")
-		w.Write(data.Raw)
-		io.WriteString(w, "\n\n")
-		flusher.Flush()
-		return true
-	}
-
-	if !writeChunk(firstResult) {
-		return
-	}
+	w.Write(firstResult.Raw)
+	flusher.Flush()
 
 	for {
 		select {
@@ -146,20 +132,15 @@ func (s *HTTPServer) streamOpenAIResults(w http.ResponseWriter, r *http.Request,
 			return
 		case data, ok := <-ch:
 			if !ok || data == nil {
-				io.WriteString(w, "data: [DONE]\n\n")
-				flusher.Flush()
 				return
 			}
 			if data.IsError {
-				io.WriteString(w, "data: ")
 				w.Write(data.Raw)
-				io.WriteString(w, "\n\n")
 				flusher.Flush()
 				return
 			}
-			if !writeChunk(data) {
-				return
-			}
+			w.Write(data.Raw)
+			flusher.Flush()
 		}
 	}
 }
