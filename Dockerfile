@@ -19,7 +19,6 @@ WORKDIR /app
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /bin/synapse-server .
-COPY --from=builder /src/config.yaml .
 
 EXPOSE 9001
 

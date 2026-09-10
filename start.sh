@@ -1,8 +1,6 @@
 #!/bin/bash
 
-CONFIG_FILE=${1:-config.yaml}
-
-echo "Building Synapse Server (Config: $CONFIG_FILE)..."
+echo "Building Synapse Server..."
 
 echo "Tidying Go modules..."
 go mod tidy
@@ -24,7 +22,7 @@ export https_proxy=http://127.0.0.1:1087
 export ALL_PROXY=socks5://127.0.0.1:1080
 
 echo "Starting server..."
-$PWD/bin/server -f "$CONFIG_FILE" &
+$PWD/bin/server &
 SERVER_PID=$!
 
 cleanup() {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"strings"
 
 	"github.com/sokinpui/synapse/internal/config"
 )
@@ -24,18 +22,17 @@ type Registry struct {
 func New(cfg *config.Config) (*Registry, error) {
 	allModels := make(map[string]LLM)
 
-	for name, pCfg := range cfg.Models {
-		apiKeys := parseAPIKeysFromEnv(pCfg.Env)
-		balancer := NewKeyBalancer(apiKeys)
+	for _, pCfg := range cfg.Providers {
+		balancer := NewKeyBalancer(pCfg.APIKeys)
 
 		for _, code := range pCfg.Codes {
-			fullKey := fmt.Sprintf("%s/%s", name, code)
+			fullKey := fmt.Sprintf("%s/%s", pCfg.Name, code)
 			if _, exists := allModels[fullKey]; exists {
-				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, name)
+				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, pCfg.Name)
 			}
 			allModels[fullKey] = NewOpenAIModel(fullKey, pCfg.BaseURL, balancer, cfg.Worker.MaxRetry)
 		}
-		log.Printf("Initialized provider '%s' with %d models and %d API keys", name, len(pCfg.Codes), len(apiKeys))
+		log.Printf("Initialized provider '%s' with %d models and %d API keys", pCfg.Name, len(pCfg.Codes), len(pCfg.APIKeys))
 	}
 
 	ordered := cfg.GetOrderedModelCodes()
@@ -47,7 +44,7 @@ func New(cfg *config.Config) (*Registry, error) {
 	}
 
 	if len(allModels) == 0 {
-		log.Println("Warning: No models were loaded. Check your config.yaml and environment variables.")
+		log.Println("Warning: No models were loaded. Check your config and environment variables.")
 	} else {
 		log.Printf("Registry initialized with %d total models", len(allModels))
 	}
@@ -65,25 +62,4 @@ func (r *Registry) GetModel(modelCode string) (LLM, error) {
 
 func (r *Registry) ListModels() []string {
 	return r.modelCodes
-}
-
-func parseAPIKeysFromEnv(envVar string) []string {
-	if envVar == "" {
-		return []string{""}
-	}
-
-	val := os.Getenv(envVar)
-	if val == "" {
-		return []string{""}
-	}
-
-	// Feature: handle comma or newline as separators, preserving empty segments as empty strings
-	normalized := strings.ReplaceAll(val, ",", "\n")
-	rawKeys := strings.Split(normalized, "\n")
-
-	var keys []string
-	for _, k := range rawKeys {
-		keys = append(keys, strings.TrimSpace(k))
-	}
-	return keys
 }

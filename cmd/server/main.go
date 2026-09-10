@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,10 +20,7 @@ import (
 func main() {
 	log.SetPrefix("server: ")
 
-	configPath := flag.String("f", "config.yaml", "path to configuration file")
-	flag.Parse()
-
-	cfg := config.Load(*configPath)
+	cfg := config.Load()
 
 	llmRegistry, err := model.New(cfg)
 	if err != nil {
