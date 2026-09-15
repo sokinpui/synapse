@@ -54,7 +54,6 @@ func LoadConfig() *Config {
 					"gemini-3.1-pro-preview",
 					"gemma-4-26b-a4b-it",
 					"gemma-4-31b-it",
-					"gemini-3.1-flash-lite-image",
 					"gemini-robotics-er-2-preview",
 					"gemini-robotics-er-2-streaming-preview",
 					"gemini-3.5-transcribe",
@@ -64,6 +63,15 @@ func LoadConfig() *Config {
 					"gemini-3.1-flash-tts-preview",
 					"gemini-2.5-flash-preview-tts",
 					"gemini-2.5-pro-preview-tts",
+				},
+			},
+			{
+				Name:    "aisrp-image",
+				BaseURL: "http://localhost:9003/v1",
+				Adapter: AISRPImageAdapter(),
+				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
+				Codes: []string{
+					"gemini-3.1-flash-lite-image",
 				},
 			},
 		},

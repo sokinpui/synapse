@@ -83,7 +83,7 @@ func (m *ProviderModel) Generate(ctx context.Context, task *GenerationTask) (*Re
 			continue
 		}
 
-		raw, err := m.adapter.TransformResponse(resp)
+		raw, err := m.adapter.TransformResponse(ctx, reqCtx, resp)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = err
