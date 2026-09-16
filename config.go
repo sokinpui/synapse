@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"strings"
+
+	"github.com/sokinpui/synapse/adapter"
 )
 
 type ServerConfig struct {
@@ -17,7 +19,7 @@ type WorkerConfig struct {
 type ProviderConfig struct {
 	Name    string
 	BaseURL string
-	Adapter ProviderAdapter
+	Adapter adapter.ProviderAdapter
 	APIKeys []string
 	Codes   []string
 }
@@ -41,7 +43,7 @@ func LoadConfig() *Config {
 			{
 				Name:    "aisrp",
 				BaseURL: "http://localhost:9003/v1",
-				Adapter: TransparentAdapter(),
+				Adapter: adapter.TransparentAdapter(),
 				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
 				Codes: []string{
 					"gemini-flash-latest",
@@ -66,9 +68,21 @@ func LoadConfig() *Config {
 				},
 			},
 			{
+				Name:    "glm",
+				BaseURL: "https://open.bigmodel.cn/api/paas/v4",
+				APIKeys: ParseAPIKeys(os.Getenv("GLM_API_KEY")),
+				Adapter: adapter.GLMAdapter(),
+				Codes: []string{
+					"glm-4-flash",
+					"glm-4-flash-250414",
+					"glm-4.7-flash",
+					"glm-z1-flash",
+				},
+			},
+			{
 				Name:    "aisrp-image",
 				BaseURL: "http://localhost:9003/v1",
-				Adapter: AISRPImageAdapter(),
+				Adapter: adapter.AISRPImageAdapter(),
 				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
 				Codes: []string{
 					"gemini-3.1-flash-lite-image",
@@ -108,4 +122,13 @@ func ParseAPIKeys(val string) []string {
 		return []string{""}
 	}
 	return keys
+}
+
+func getEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }

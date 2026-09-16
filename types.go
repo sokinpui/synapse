@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+
+	"github.com/sokinpui/synapse/adapter"
 )
 
 var (
@@ -19,10 +21,7 @@ type GenerationTask struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-type Result struct {
-	Raw     []byte
-	IsError bool
-}
+type Result = adapter.Result
 
 type ModelListJSON struct {
 	Object string      `json:"object"`

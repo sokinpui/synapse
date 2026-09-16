@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/sokinpui/synapse/adapter"
 )
 
 type LLM interface {
@@ -18,18 +20,18 @@ type ProviderModel struct {
 	provider  string
 	modelCode string
 	baseURL   string
-	adapter   ProviderAdapter
+	adapter   adapter.ProviderAdapter
 	balancer  *KeyBalancer
 	maxRetry  int
 	client    *http.Client
 }
 
-func NewProviderModel(provider, modelCode, baseURL string, adapter ProviderAdapter, balancer *KeyBalancer, maxRetry int) *ProviderModel {
+func NewProviderModel(provider, modelCode, baseURL string, adp adapter.ProviderAdapter, balancer *KeyBalancer, maxRetry int) *ProviderModel {
 	return &ProviderModel{
 		provider:  provider,
 		modelCode: modelCode,
 		baseURL:   baseURL,
-		adapter:   adapter,
+		adapter:   adp,
 		balancer:  balancer,
 		maxRetry:  maxRetry,
 		client:    &http.Client{},
@@ -41,7 +43,7 @@ func (m *ProviderModel) Generate(ctx context.Context, task *GenerationTask) (*Re
 		return nil, fmt.Errorf("%w: API key is required", ErrConfiguration)
 	}
 
-	reqCtx := &RequestContext{
+	reqCtx := &adapter.RequestContext{
 		BaseURL:   m.baseURL,
 		Endpoint:  task.Endpoint,
 		ModelCode: m.modelCode,
@@ -108,7 +110,7 @@ func (m *ProviderModel) GenerateStream(ctx context.Context, task *GenerationTask
 			return
 		}
 
-		reqCtx := &RequestContext{
+		reqCtx := &adapter.RequestContext{
 			BaseURL:   m.baseURL,
 			Endpoint:  task.Endpoint,
 			ModelCode: m.modelCode,
@@ -179,9 +181,9 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 	allModels := make(map[string]LLM)
 
 	for _, pCfg := range cfg.Providers {
-		adapter := pCfg.Adapter
-		if adapter == nil {
-			adapter = TransparentAdapter()
+		adp := pCfg.Adapter
+		if adp == nil {
+			adp = adapter.TransparentAdapter()
 		}
 
 		balancer := NewKeyBalancer(pCfg.APIKeys)
@@ -191,9 +193,9 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 			if _, exists := allModels[fullKey]; exists {
 				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, pCfg.Name)
 			}
-			allModels[fullKey] = NewProviderModel(pCfg.Name, code, pCfg.BaseURL, adapter, balancer, cfg.Worker.MaxRetry)
+			allModels[fullKey] = NewProviderModel(pCfg.Name, code, pCfg.BaseURL, adp, balancer, cfg.Worker.MaxRetry)
 		}
-		log.Printf("Initialized provider '%s' (adapter: %s) with %d models and %d API keys", pCfg.Name, adapter.Name(), len(pCfg.Codes), len(pCfg.APIKeys))
+		log.Printf("Initialized provider '%s' (adapter: %s) with %d models and %d API keys", pCfg.Name, adp.Name(), len(pCfg.Codes), len(pCfg.APIKeys))
 	}
 
 	ordered := cfg.GetOrderedModelCodes()
