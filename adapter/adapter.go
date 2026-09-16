@@ -64,5 +64,5 @@ func EmitSSEEvent(out chan<- *Result, payload map[string]any) {
 	if err != nil {
 		return
 	}
-	out <- &Result{Raw: []byte(fmt.Sprintf("data: %s\n\n", data))}
+	out <- &Result{Raw: fmt.Appendf(nil, "data: %s\n\n", data)}
 }

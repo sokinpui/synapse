@@ -124,12 +124,12 @@ func isImageGenerationEndpoint(endpoint string) bool {
 }
 
 func extractBase64(content string) (string, error) {
-	idx := strings.Index(content, "base64,")
-	if idx == -1 {
+	_, after, ok := strings.Cut(content, "base64,")
+	if !ok {
 		return "", errors.New("no base64 image found in upstream response content")
 	}
 
-	raw := content[idx+len("base64,"):]
+	raw := after
 	end := strings.IndexFunc(raw, func(r rune) bool {
 		return !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' || r == '-' || r == '_')
 	})
