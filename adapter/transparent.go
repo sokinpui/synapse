@@ -53,7 +53,7 @@ func (a *transparentAdapter) TransformResponse(ctx context.Context, reqCtx *Requ
 	return io.ReadAll(resp.Body)
 }
 
-func (a *transparentAdapter) TransformStream(ctx context.Context, resp *http.Response, out chan<- *Result) error {
+func (a *transparentAdapter) TransformStream(ctx context.Context, reqCtx *RequestContext, resp *http.Response, out chan<- *Result) error {
 	buf := make([]byte, 4096)
 	for {
 		if ctx.Err() != nil {

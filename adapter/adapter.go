@@ -26,7 +26,7 @@ type ProviderAdapter interface {
 	Name() string
 	BuildRequest(ctx context.Context, reqCtx *RequestContext) (*http.Request, error)
 	TransformResponse(ctx context.Context, reqCtx *RequestContext, resp *http.Response) ([]byte, error)
-	TransformStream(ctx context.Context, resp *http.Response, out chan<- *Result) error
+	TransformStream(ctx context.Context, reqCtx *RequestContext, resp *http.Response, out chan<- *Result) error
 }
 
 func BuildTargetURL(baseURL, endpoint string) string {

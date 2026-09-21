@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type glmAdapter struct {
@@ -175,7 +176,22 @@ func (a *glmAdapter) TransformResponse(ctx context.Context, reqCtx *RequestConte
 	return json.Marshal(respResult)
 }
 
-func (a *glmAdapter) TransformStream(ctx context.Context, resp *http.Response, out chan<- *Result) error {
+type glmToolCall struct {
+	Index    int            `json:"index"`
+	ID       string         `json:"id"`
+	Type     string         `json:"type"`
+	Function map[string]any `json:"function"`
+}
+
+type embeddedToolPayload struct {
+	Delta struct {
+		ToolCalls []glmToolCall `json:"tool_calls"`
+	} `json:"delta"`
+	ToolCalls []glmToolCall `json:"tool_calls"`
+}
+
+func (a *glmAdapter) TransformStream(ctx context.Context, reqCtx *RequestContext, resp *http.Response, out chan<- *Result) error {
+	isResponses := isResponsesEndpoint(reqCtx.Endpoint)
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
 	var activeToolCallID string
@@ -198,6 +214,11 @@ func (a *glmAdapter) TransformStream(ctx context.Context, resp *http.Response, o
 
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
+			if !isResponses {
+				out <- &Result{Raw: []byte("data: [DONE]\n\n")}
+				return nil
+			}
+
 			if activeToolCallID != "" {
 				EmitSSEEvent(out, map[string]any{
 					"type": "response.output_item.done",
@@ -216,6 +237,9 @@ func (a *glmAdapter) TransformStream(ctx context.Context, resp *http.Response, o
 		}
 
 		var chunk struct {
+			ID      string `json:"id"`
+			Created int64  `json:"created"`
+			Model   string `json:"model"`
 			Choices []struct {
 				Delta struct {
 					Content          string `json:"content"`
@@ -254,6 +278,104 @@ func (a *glmAdapter) TransformStream(ctx context.Context, resp *http.Response, o
 		}
 
 		delta := chunk.Choices[0].Delta
+
+		if preText, toolCalls, ok := extractEmbeddedToolCalls(delta.Content); ok {
+			if isResponses {
+				if preText != "" {
+					EmitSSEEvent(out, map[string]any{
+						"type":  "response.output_text.delta",
+						"delta": preText,
+					})
+				}
+				for _, tc := range toolCalls {
+					cid := tc.ID
+					if cid == "" {
+						cid = fmt.Sprintf("call_%d", time.Now().UnixNano())
+					}
+					fnName, _ := tc.Function["name"].(string)
+					fnArgs, _ := tc.Function["arguments"].(string)
+					EmitSSEEvent(out, map[string]any{
+						"type": "response.output_item.added",
+						"item": map[string]any{
+							"type":    "function_call",
+							"id":      cid,
+							"call_id": cid,
+							"name":    fnName,
+						},
+					})
+					if fnArgs != "" {
+						EmitSSEEvent(out, map[string]any{
+							"type":      "response.function_call_arguments.done",
+							"arguments": fnArgs,
+						})
+					}
+					EmitSSEEvent(out, map[string]any{
+						"type": "response.output_item.done",
+						"item": map[string]any{
+							"type":      "function_call",
+							"id":      cid,
+							"call_id":   cid,
+							"name":      fnName,
+							"arguments": fnArgs,
+						},
+					})
+				}
+			} else {
+				if preText != "" {
+					EmitSSEEvent(out, map[string]any{
+						"id":      chunk.ID,
+						"object":  "chat.completion.chunk",
+						"created": chunk.Created,
+						"model":   chunk.Model,
+						"choices": []map[string]any{
+							{
+								"index": 0,
+								"delta": map[string]any{
+									"role":    "assistant",
+									"content": preText,
+								},
+							},
+						},
+					})
+				}
+				var rawTCs []any
+				for i, tc := range toolCalls {
+					cid := tc.ID
+					if cid == "" {
+						cid = fmt.Sprintf("call_%d", time.Now().UnixNano())
+					}
+					rawTCs = append(rawTCs, map[string]any{
+						"index":    i,
+						"id":       cid,
+						"type":     "function",
+						"function": tc.Function,
+					})
+				}
+				EmitSSEEvent(out, map[string]any{
+					"id":      chunk.ID,
+					"object":  "chat.completion.chunk",
+					"created": chunk.Created,
+					"model":   chunk.Model,
+					"choices": []map[string]any{
+						{
+							"index": 0,
+							"delta": map[string]any{
+								"role":       "assistant",
+								"tool_calls": rawTCs,
+							},
+							"finish_reason": "tool_calls",
+						},
+					},
+				})
+			}
+			continue
+		}
+
+		if !isResponses {
+			out <- &Result{Raw: fmt.Appendf(nil, "%s\n\n", line)}
+			continue
+		}
+
 		if delta.ReasoningContent != "" {
 			EmitSSEEvent(out, map[string]any{
 				"type":  "response.reasoning_text.delta",
@@ -311,6 +433,35 @@ func (a *glmAdapter) TransformStream(ctx context.Context, resp *http.Response, o
 		return err
 	}
 	return nil
+}
+
+func extractEmbeddedToolCalls(content string) (string, []glmToolCall, bool) {
+	if !strings.Contains(content, "\"tool_calls\"") || !strings.Contains(content, "\"function\"") {
+		return "", nil, false
+	}
+
+	start := strings.Index(content, "{")
+	end := strings.LastIndex(content, "}")
+	if start == -1 || end <= start {
+		return "", nil, false
+	}
+
+	candidate := content[start : end+1]
+	var payload embeddedToolPayload
+	if err := json.Unmarshal([]byte(candidate), &payload); err != nil {
+		return "", nil, false
+	}
+
+	toolCalls := payload.Delta.ToolCalls
+	if len(toolCalls) == 0 {
+		toolCalls = payload.ToolCalls
+	}
+	if len(toolCalls) == 0 {
+		return "", nil, false
+	}
+
+	preText := strings.TrimSpace(content[:start])
+	return preText, toolCalls, true
 }
 
 func isResponsesEndpoint(endpoint string) bool {

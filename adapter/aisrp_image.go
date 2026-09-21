@@ -114,8 +114,8 @@ func (a *aisrpImageAdapter) TransformResponse(ctx context.Context, reqCtx *Reque
 	return json.Marshal(imageResult)
 }
 
-func (a *aisrpImageAdapter) TransformStream(ctx context.Context, resp *http.Response, out chan<- *Result) error {
-	return a.transparent.TransformStream(ctx, resp, out)
+func (a *aisrpImageAdapter) TransformStream(ctx context.Context, reqCtx *RequestContext, resp *http.Response, out chan<- *Result) error {
+	return a.transparent.TransformStream(ctx, reqCtx, resp, out)
 }
 
 func isImageGenerationEndpoint(endpoint string) bool {

@@ -155,7 +155,7 @@ func (m *ProviderModel) GenerateStream(ctx context.Context, task *GenerationTask
 				continue
 			}
 
-			err = m.adapter.TransformStream(ctx, resp, outCh)
+			err = m.adapter.TransformStream(ctx, reqCtx, resp, outCh)
 			if err != nil {
 				errCh <- err
 			}
