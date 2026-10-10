@@ -46,6 +46,9 @@ func LoadConfig() *Config {
 				Adapter: adapter.TransparentAdapter(),
 				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
 				Codes: []string{
+					"gemini-flash-latest-search",
+					"gemini-flash-lite-latest-search",
+					"gemini-pro-latest-search",
 					"gemini-flash-latest",
 					"gemini-flash-lite-latest",
 					"gemini-pro-latest",
@@ -65,6 +68,15 @@ func LoadConfig() *Config {
 					"gemini-3.1-flash-tts-preview",
 					"gemini-2.5-flash-preview-tts",
 					"gemini-2.5-pro-preview-tts",
+				},
+			},
+			{
+				Name:    "v100",
+				BaseURL: "http://localhost:10000/v1",
+				Adapter: adapter.TransparentAdapter(),
+				APIKeys: ParseAPIKeys(os.Getenv("AISRP_API_KEYS")),
+				Codes: []string{
+					"Qwen3.8-27B.q4_k_m.gguf",
 				},
 			},
 			{
