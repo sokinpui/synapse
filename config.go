@@ -98,7 +98,6 @@ func LoadConfig() *Config {
 				},
 			},
 		},
-		},
 	}
 }
 
