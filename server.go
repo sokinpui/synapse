@@ -32,15 +32,17 @@ func (s *HTTPServer) RegisterRoutes(mux *http.ServeMux) {
 func (s *HTTPServer) handleOpenAIListModels(w http.ResponseWriter, r *http.Request) {
 	log.Printf("-> %s %s", blueString(r.Method), r.URL.Path)
 
-	modelCodes := s.llmRegistry.ListModels()
+	modelSpecs := s.llmRegistry.ListModelSpecs()
 	now := time.Now().Unix()
-	data := make([]ModelJSON, len(modelCodes))
-	for i, m := range modelCodes {
+	data := make([]ModelJSON, len(modelSpecs))
+	for i, spec := range modelSpecs {
 		data[i] = ModelJSON{
-			ID:      m,
-			Object:  "model",
-			Created: now,
-			OwnedBy: "synapse",
+			ID:         spec.Code,
+			Object:     "model",
+			Created:    now,
+			OwnedBy:    "synapse",
+			InputType:  spec.InputType,
+			OutputType: spec.OutputType,
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")

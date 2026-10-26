@@ -175,6 +175,7 @@ func (m *ProviderModel) CountTokens(prompt string) (int, error) {
 type Registry struct {
 	models     map[string]LLM
 	modelCodes []string
+	modelSpecs []ModelSpec
 }
 
 func NewRegistry(cfg *Config) (*Registry, error) {
@@ -188,14 +189,14 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 
 		balancer := NewKeyBalancer(pCfg.APIKeys)
 
-		for _, code := range pCfg.Codes {
-			fullKey := fmt.Sprintf("%s/%s", pCfg.Name, code)
+		for _, spec := range pCfg.Models {
+			fullKey := fmt.Sprintf("%s/%s", pCfg.Name, spec.Code)
 			if _, exists := allModels[fullKey]; exists {
-				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", code, pCfg.Name)
+				log.Printf("Warning: Duplicate model entry '%s' found in provider '%s'.", spec.Code, pCfg.Name)
 			}
-			allModels[fullKey] = NewProviderModel(pCfg.Name, code, pCfg.BaseURL, adp, balancer, cfg.Worker.MaxRetry)
+			allModels[fullKey] = NewProviderModel(pCfg.Name, spec.Code, pCfg.BaseURL, adp, balancer, cfg.Worker.MaxRetry)
 		}
-		log.Printf("Initialized provider '%s' (adapter: %s) with %d models and %d API keys", pCfg.Name, adp.Name(), len(pCfg.Codes), len(pCfg.APIKeys))
+		log.Printf("Initialized provider '%s' (adapter: %s) with %d models and %d API keys", pCfg.Name, adp.Name(), len(pCfg.Models), len(pCfg.APIKeys))
 	}
 
 	ordered := cfg.GetOrderedModelCodes()
@@ -206,13 +207,21 @@ func NewRegistry(cfg *Config) (*Registry, error) {
 		}
 	}
 
+	orderedSpecs := cfg.GetOrderedModelSpecs()
+	var finalSpecs []ModelSpec
+	for _, spec := range orderedSpecs {
+		if _, ok := allModels[spec.Code]; ok {
+			finalSpecs = append(finalSpecs, spec)
+		}
+	}
+
 	if len(allModels) == 0 {
 		log.Println("Warning: No models were loaded. Check your config and environment variables.")
 	} else {
 		log.Printf("Registry initialized with %d total models", len(allModels))
 	}
 
-	return &Registry{models: allModels, modelCodes: finalOrder}, nil
+	return &Registry{models: allModels, modelCodes: finalOrder, modelSpecs: finalSpecs}, nil
 }
 
 func (r *Registry) GetModel(modelCode string) (LLM, error) {
@@ -225,4 +234,8 @@ func (r *Registry) GetModel(modelCode string) (LLM, error) {
 
 func (r *Registry) ListModels() []string {
 	return r.modelCodes
+}
+
+func (r *Registry) ListModelSpecs() []ModelSpec {
+	return r.modelSpecs
 }
